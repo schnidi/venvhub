@@ -50,10 +50,10 @@
             <p>Klonovanie Venvu nevytvára slepé kópie s nefunkčnými absolútnymi cestami. Vykonáva <strong>5-krokovú reprodukčnú rekonštrukciu</strong>: zistí závislosti, vytvorí čistý Venv, znova nainštaluje balíčky vrátane editovateľných (<code>pip -e</code>) a prenesie bootstrap súbory pre lokálne balíčky.</p>
         </div>
 
-        <!-- 5. Venv Validator -->
+        <!-- 5. Venv Validator & HW Ochrana -->
         <div class="content-card">
-            <h3>🔍 Venv Validator & Diagnostika</h3>
-            <p>Systém neustále kontroluje integritu súboru <code>pyvenv.cfg</code>. Ak sa zmení cesta k Pythonu alebo disk, rozlíši stavy <em>FIXABLE</em> a <em>INCOMPATIBLE</em> a umožní automatickú opravu prostredia bez straty nainštalovaných balíčkov.</p>
+            <h3>🔍 Smart Diagnostika & HW Ochrana</h3>
+            <p>VenvHub presne rozlišuje medzi <em>Systémovým</em> a <em>Embed (Local)</em> Pythonom. Ak prenášate aplikáciu na USB kľúči na iný PC: <strong>Embed prostredia</strong> sa vďaka Auto-Healingu automaticky opravia a bežia všade. <strong>Systémové prostredia</strong> systém deteguje a zablokuje na základe Hardware ID podpisov, čím chráni vaše projekty pred deštruktívnymi pádmi z dôvodu chýbajúcich C-knižníc na cudzom PC.</p>
         </div>
 
         <!-- 6. Process Registry -->

@@ -50,10 +50,10 @@
             <p>Cloning a Venv doesn't create blind copies with hardcoded broken paths. It executes a <strong>5-step reproduction reconstruction</strong>: freezes dependencies, builds a clean Venv, re-installs packages including editables (<code>pip -e</code>), and transfers bootstrap files for local packages.</p>
         </div>
 
-        <!-- 5. Venv Validator -->
+        <!-- 5. Venv Validator & HW Protection -->
         <div class="content-card">
-            <h3>🔍 Venv Validator & Diagnostics</h3>
-            <p>The system constantly checks <code>pyvenv.cfg</code> integrity. If the Python path or drive letter changes, it identifies <em>FIXABLE</em> and <em>INCOMPATIBLE</em> states and enables automated environment repair without losing installed packages.</p>
+            <h3>🔍 Smart Diagnostics & HW Protection</h3>
+            <p>VenvHub accurately distinguishes between <em>System</em> and <em>Embed (Local)</em> Python. If you transfer the application on a USB drive to another PC: <strong>Embed environments</strong> automatically repair themselves thanks to Auto-Healing and run anywhere. <strong>System environments</strong> are detected and blocked by the system based on Hardware ID signatures, protecting your projects from destructive crashes due to missing C-libraries on an external PC.</p>
         </div>
 
         <!-- 6. Process Registry -->
