@@ -52,7 +52,7 @@
 
         <!-- 5. Venv Validator & HW Ochrana -->
         <div class="content-card">
-            <h3>🔍 Smart Diagnostika & HW Ochrana</h3>
+            <h3>🧳 Ochrana prenosnosti (Portable)</h3>
             <p>VenvHub presne rozlišuje medzi <em>Systémovým</em> a <em>Embed (Local)</em> Pythonom. Ak prenášate aplikáciu na USB kľúči na iný PC: <strong>Embed prostredia</strong> sa vďaka Auto-Healingu automaticky opravia a bežia všade. <strong>Systémové prostredia</strong> systém deteguje a zablokuje na základe Hardware ID podpisov, čím chráni vaše projekty pred deštruktívnymi pádmi z dôvodu chýbajúcich C-knižníc na cudzom PC.</p>
         </div>
 
@@ -80,16 +80,22 @@
             <p>Sťahujte "Local" verzie Pythonu zo ZIP archívov bez nutnosti inštalácie do Windowsu (bez zásahu do Registrov a PATH). VenvHub ich <strong>automaticky "hackne" a opraví</strong> (nainštaluje Pip, odomkne <code>site-packages</code> v <code>._pth</code> súbore), aby sa správali ako plnohodnotné inštalácie.</p>
         </div>
 
-        <!-- 10. Portable -->
+        <!-- 10. Izolované VS Code Profily -->
         <div class="content-card">
-            <h3>🧳 Ochrana prenosnosti (Portable)</h3>
-            <p>Kódujete na USB kľúči? Ak sa na inom PC zmení písmeno disku, <strong>Venv Validator</strong> všetky cesty automaticky opraví. <strong>Zároveň chráni váš kód:</strong> Systémový Listener sleduje Hardware ID počítača a zakáže spúšťanie nekompatibilných systémových Venvov na cudzích strojoch.</p>
+            <h3>🛡️ Izolované VS Code Profily (Sandbox)</h3>
+            <p>Neporiadok v rozšíreniach? VenvHub umožňuje tvorbu plne izolovaných používateľských profilov pre VS Code (cez <code>--user-data-dir</code>). Každý profil má vlastné oddelené nastavenia a pluginy. Vstavaný synchronizátor dokáže dokonca jedným kliknutím bezpečne preklonovať vaše systémové prostredie priamo do prenosnej zložky.</p>
         </div>
 
         <!-- 11. UI/UX & AI Modding -->
         <div class="content-card">
             <h3>🎨 Dual-Theme & AI Modding</h3>
             <p>Moderné UI postavené na robustnom moste pre PyQt6/PySide6, ktoré beží kompletne asynchrónne (nevyrušuje pri inštaláciách). Obsahuje systém zabudovaných aj užívateľských QSS skinov. Dajte skin prefarbiť umelej inteligencii a naimportujte ho späť do aplikácie jedným kliknutím!</p>
+        </div>
+
+        <!-- 12. Rodné listy aplikácií -->
+        <div class="content-card">
+            <h3>📜 Generátor "Rodných listov"</h3>
+            <p>Každé virtuálne prostredie automaticky generuje a udržiava svoj <em>Rodný list</em> (JSON). Ten v reálnom čase dokumentuje verziu Pythonu, zdrojové cesty a presný zoznam nainštalovaných balíčkov. Pri kompilácii do <code>.exe</code> sa tento list natvrdo pribalí k aplikácii, takže navždy viete, z akej "DNA" bola postavená.</p>
         </div>
     </div>
 </section>
