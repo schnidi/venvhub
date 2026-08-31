@@ -79,7 +79,7 @@ This README provides an overview. The complete user manual is included directly 
 *   VS Code User Profiles
 *   VS Code Integration
 *   Architecture & Compilation
-[cite: 12]
+
 
 ---
 
@@ -91,7 +91,7 @@ This README provides an overview. The complete user manual is included directly 
 *   Per-user settings and themes
 
 #### Portable Version
-*   Extract to any folder (including USB drives) [cite: 13, 15]
+*   Extract to any folder (including USB drives) 
 *   All data stored alongside the executable
 *   Recognized by presence of `_is_portable.ini` marker file
 *   Auto-corrects drive letter changes
@@ -101,14 +101,14 @@ This README provides an overview. The complete user manual is included directly 
 ### 🏗️ Architecture
 
 #### Dual-Framework Bridge
-Written for PyQt6 but includes a Compatibility Bridge (`pyqt_to_pyside.py`) using `MetaPathFinder` [cite: 12]. If the environment has PySide6, the bridge silently intercepts all PyQt6 imports and redirects them to PySide6 at runtime [cite: 12].
+Written for PyQt6 but includes a Compatibility Bridge (`pyqt_to_pyside.py`) using `MetaPathFinder` . If the environment has PySide6, the bridge silently intercepts all PyQt6 imports and redirects them to PySide6 at runtime.
 
 #### Self-Replication (Dogfooding)
-VenvHub Pro can compile itself using its own PyInstaller Builder [cite: 12]. This guarantees the builder is production-ready and capable of packaging even complex applications [cite: 12, 16].
+VenvHub Pro can compile itself using its own PyInstaller Builder . This guarantees the builder is production-ready and capable of packaging even complex applications.
 
 #### Build Process
-*   UI files (`*.ui`) are loaded dynamically [cite: 12]
-*   PyInstaller builds with either PyQt6 or PySide6 (hidden imports needed for PySide6) [cite: 12]
+*   UI files (`*.ui`) are loaded dynamically 
+*   PyInstaller builds with either PyQt6 or PySide6 (hidden imports needed for PySide6) 
 *   NSIS installer script wraps the built `dist/VenvHubPro` folder
 
 ---
