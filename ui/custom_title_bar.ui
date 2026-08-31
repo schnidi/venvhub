@@ -86,8 +86,32 @@
      </property>
     </spacer>
    </item>
+
+   <!-- TLAČIDLO AKTUALIZÁCIE (GITHUB UPDATE) -->
+<item>
+    <widget class="QPushButton" name="btn_update_github">
+     <property name="minimumSize">
+      <size>
+       <width>45</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>45</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="objectName">
+      <string>btn_update_github</string>
+     </property>
+    </widget>
+   </item>
    
-   <!-- NOVÉ TLAČIDLO ABOUT -->
+   <!-- TLAČIDLO ABOUT -->
    <item>
     <widget class="QPushButton" name="btn_about">
      <property name="minimumSize">

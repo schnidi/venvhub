@@ -334,3 +334,16 @@ QPushButton#btn_vscode:hover {
 #ProjectMiniBar #btn_pin:checked:hover {
     background-color: #0078d4; 
 }
+
+/* Tlačidlo Aktualizácie (GitHub Update) */
+QPushButton#btn_update_github {
+    qproperty-icon: url({{CORE_THEMES_DIR}}/icon/update/github_update_black.svg);
+    qproperty-iconSize: 18px 18px;
+    background-color: transparent;
+    border: none;
+}
+
+QPushButton#btn_update_github:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}

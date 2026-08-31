@@ -1,4 +1,3 @@
-#----------------------------------------
 # Súbor: windows/pip_package_widget.py
 #----------------------------------------
 
@@ -182,7 +181,9 @@ class PipPackageWidget(QWidget):
         if os.path.exists(req_file):
             try:
                 # Prečítame súbor (vráti množinu normalizovaných názvov)
-                parsed_reqs = RequirementsParser.parse(req_file)
+                # OPRAVA: bez pip_e_root parser nevie správne vyriešiť -e riadky
+                # (editable balíčky) a mylne ich vynechá z parsed_reqs.
+                parsed_reqs = RequirementsParser.parse(req_file, pip_e_root=core.pip_e_packages_root)
                 # Normalizujeme názov balíčka, na ktorý sme klikli (napr. Flask -> flask)
                 normalized_pkg = AptLogic._normalize(pkg_name)
                 
@@ -236,3 +237,4 @@ class PipPackageWidget(QWidget):
         msg_start = LanguageManager.get("msg_installing_spec", "\n--- Inštalujem {0} ---").format(package_spec)
         self.run_pip_command(full_cmd, msg_start)
         self.edit_specific_version.clear()
+

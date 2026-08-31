@@ -320,4 +320,29 @@ QPushButton#btn_vscode:hover {
 #ProjectMiniBar #btn_refresh:hover,
 #ProjectMiniBar #btn_pin:hover,
 #ProjectMiniBar #btn_settings:hover {
+    background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* STAV, KEĎ JE PRIPÍNAČKA AKTÍVNA (ZAPNUTÁ) */
+#ProjectMiniBar #btn_pin:checked {
+    background-color: #ddf4ff; 
+    border: 1px solid #0969da;
+}
+
+#ProjectMiniBar #btn_pin:checked:hover {
+    background-color: #b6e3ff; 
+}
+
+/* Tlačidlo Aktualizácie (GitHub Update) */
+QPushButton#btn_update_github {
+    qproperty-icon: url({{CORE_THEMES_DIR}}/icon/update/github_update_black.svg);
+    qproperty-iconSize: 18px 18px;
+    background-color: transparent;
+    border: none;
+}
+
+QPushButton#btn_update_github:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
    

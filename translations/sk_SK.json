@@ -784,7 +784,9 @@
     "msg_confirm_uninstall_req": "⚠️ UPOZORNENIE: Balíček '{0}' je explicitne definovaný v súbore requirements.txt!\n\nAk ho odinštalujete, vaše prostredie už nebude plne zodpovedať definícii projektu.\nNaozaj chcete pokračovať?",
 
     "btn_yes": "Áno",
-    "btn_no": "Nie"
+    "btn_no": "Nie",
+
+    "tooltip_update_available": "Dostupná nová verzia: v{0}\nKliknite pre stiahnutie"
     
 
 }

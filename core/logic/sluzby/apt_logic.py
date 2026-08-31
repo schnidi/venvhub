@@ -1,4 +1,3 @@
-#----------------------------------------
 # Súbor: core/logic/sluzby/apt_logic.py
 #----------------------------------------
 
@@ -299,7 +298,7 @@ class AptLogic:
                 req_file = Paths.get_requirements_txt_path(project_path)
                 
                 # Získame kompletný aktuálny zoznam zo všetkých súborov (rekurzívne)
-                raw_wanted = RequirementsParser.parse(req_file) if os.path.exists(req_file) else set()
+                raw_wanted = RequirementsParser.parse(req_file, pip_e_root=core.pip_e_packages_root) if os.path.exists(req_file) else set()
                 wanted_packages = {AptLogic._normalize(p) for p in raw_wanted}
 
                 # Načítame predchádzajúci stav requirements pre tento venv
@@ -365,22 +364,31 @@ class AptLogic:
             all_installed = set(graph.keys())
             state_explicit = AptLogic.load_explicit_list(venv_path)
             explicit_roots = state_explicit.copy()
-            
+
+            # >>> OPRAVA: normalizácia released_packages MUSÍ prebehnúť PRED pip-e blokom,
+            # inak porovnanie "e_name not in released_packages" nižšie nesedí (case/oddeľovače).
+            if not released_packages:
+                released_packages = []
+            released_packages = [AptLogic._normalize(p) for p in released_packages]
+            # <<< KONIEC OPRAVY
+
             # 1. Poistka: Requirements (Rekurzívne cez Parser + pip-e prepojenie)
             parsed_reqs = set()
             try:
                 project_path = Paths.get_project_path(core.projects_root, core.active_project)
                 req_file = Paths.get_requirements_txt_path(project_path)
                 if os.path.exists(req_file):
-                    raw_parsed = RequirementsParser.parse(req_file)
+                    raw_parsed = RequirementsParser.parse(req_file, pip_e_root=core.pip_e_packages_root)
                     parsed_reqs = {AptLogic._normalize(p) for p in raw_parsed}
                     explicit_roots.update(parsed_reqs)
 
                 # >>> ZMENA: Podpora pre pip -e balíčky (zaradenie medzi explicitné korene bez nutnosti zápisu v requirements.txt)
+                # OPRAVA: ak bol balíček práve odstránený/zakomentovaný v requirements.txt (je v released_packages),
+                # NESMIE sa tu znovu automaticky "ochrániť" len preto, že je fyzicky ešte nainštalovaný.
                 editable_pkgs = AptLogic.get_editable_packages(venv_path)
                 for e_pkg in editable_pkgs:
                     e_name = AptLogic._normalize(e_pkg.get("name", ""))
-                    if e_name:
+                    if e_name and e_name not in released_packages:
                         explicit_roots.add(e_name)
                 # <<< KONIEC ZMENY
             except Exception:
@@ -414,10 +422,7 @@ class AptLogic:
 
             auto_needed = get_all_required(explicit_roots)
 
-            if not released_packages:
-                released_packages = []
-            released_packages = [AptLogic._normalize(p) for p in released_packages]
-            
+            # (normalizácia released_packages už prebehla vyššie, pred pip-e blokom)
             released_tree = get_all_required(released_packages)
             released_tree.update(released_packages)
 
@@ -478,3 +483,4 @@ class AptLogic:
                     process.kill()
                 log_callback(LanguageManager.get("apt_err", "❌ [APT] Chyba pri odinštalovaní: {0}").format(e))
                 return False
+

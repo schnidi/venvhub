@@ -118,9 +118,15 @@ class MasterManager(QWidget):
     def retranslate_ui(self):
         LanguageManager.translate_ui(self)
         
-        if hasattr(self, 'title_bar'):
-            self.title_bar.lbl_title.setText(self.windowTitle())
+        # 1. Získame preklad pre Manažéra zo slovníka
+        title_text = LanguageManager.get("manager_window_title", "VenvHub Pro - Správca")
+        self.setWindowTitle(title_text)
         
+        # 2. PRIAME ODOVZDANIE DO TITLE BARU (Stará funkčná metóda):
+        if hasattr(self, 'title_bar') and self.title_bar:
+            self.title_bar.lbl_title.setText(title_text)
+        
+        # 3. Preklady záložiek
         self.tab_widget.setTabText(0, LanguageManager.get("tab_venvs", "Správa Venvs"))
         self.tab_widget.setTabText(1, LanguageManager.get("tab_multi", "Hromadné Spúšťanie (Multi-run)"))
         self.tab_widget.setTabText(2, LanguageManager.get("tab_container", "Kontajner / Autostart"))

@@ -171,6 +171,9 @@ class QuickSettingsWindow(QWidget):
         if lang_code and lang_code != self.core.language:
             self.core.language = lang_code
             self.core.save_config()
+            # --- DOPLNENÉ: Načítanie nového jazyka (tým sa odošle signál do TitleBaru a celej appky) ---
+            LanguageManager.load_language(lang_code)
+            self.retranslate_ui()
             self.language_changed.emit(lang_code)
 
     def on_project_selected(self, project_name):

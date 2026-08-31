@@ -39,7 +39,7 @@ class PathNormalizer:
     # =========================================================================
     @staticmethod
     def sanitize_requirements_file(file_path: str) -> None:
-        """
+        r"""
         Prečíta requirements.txt a ak nájde akékoľvek cesty so spätnými lomítkami (\),
         automaticky ich na disku opraví na dopredné lomítka (/) ešte predtým,
         než súbor prečíta PIP inštalátor.

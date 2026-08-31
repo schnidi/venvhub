@@ -791,6 +791,8 @@
     "msg_confirm_uninstall_req": "⚠️ WARNING: Package '{0}' is explicitly defined in requirements.txt!\n\nIf you uninstall it, your environment will no longer fully match the project definition.\nDo you really want to continue?",
 
     "btn_yes": "Yes",
-    "btn_no": "No"
+    "btn_no": "No",
+
+    "tooltip_update_available": "New version available: v{0}\nClick to download"
 
 }
