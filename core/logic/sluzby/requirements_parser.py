@@ -60,7 +60,7 @@ class RequirementsParser:
                     if match:
                         return match.group(1)
 
-        # 2. Detekcia URL, VCS a SSH adries (napr. git@github.com:user/repo.git#egg=pkg)
+        # 2. Detekcia URL, VCS a SSH adries (napr. git@github.com:user/repo.git#egg=pkg alebo čisté URL/Git)
         is_url_or_path = (
             token.startswith(RequirementsParser._URL_SCHEMES) or 
             token.startswith(('./', '../', '/', '.\\', '..\\')) or
@@ -70,18 +70,45 @@ class RequirementsParser:
         )
 
         if is_url_or_path:
+            # A) Priorita 1: Explicitná značka #egg=...
             egg_match = re.search(r'#egg=([^\s&]+)', token)
             if egg_match:
                 raw_egg = egg_match.group(1)
-                # Odstránenie extras napr. [async]
                 raw_egg = re.sub(r'\[.*?\]', '', raw_egg)
-                # Odstránenie verzie určenej cez '=='
                 raw_egg = raw_egg.split('==')[0]
-                # Odstránenie legacy verzie na konci reťazca podľa PEP 440 (-1.2.3, -v1.0.0, -0.1-beta)
                 raw_egg = re.sub(r'-v?\d+(?:\.\d+)+(?:[-._]?[a-zA-Z0-9]+)*$', '', raw_egg)
                 match = re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9_.\-]*[A-Za-z0-9])?", raw_egg)
                 return match.group(0) if match else None
-            return None
+
+            # B) Priorita 2 (Fallback heuristika pre čisté URL / Git bez #egg=):
+            # 1. Odstránenie fragmentov a parametrov (#..., ?...)
+            clean_url = re.sub(r'[#?].*$', '', token).strip()
+
+            # 2. Odstránenie vetvy/tagu na konci (@main, @v1.0.0, @commit)
+            if '@' in clean_url and not clean_url.startswith('git@') and not re.match(r'^[a-zA-Z0-9_+\-]+@[a-zA-Z0-9_.\-]+:', clean_url):
+                clean_url = clean_url.rsplit('@', 1)[0]
+            elif clean_url.startswith('git@') or re.match(r'^[a-zA-Z0-9_+\-]+@[a-zA-Z0-9_.\-]+:', clean_url):
+                if ':' in clean_url:
+                    prefix, path_part = clean_url.split(':', 1)
+                    if '@' in path_part:
+                        clean_url = f"{prefix}:{path_part.rsplit('@', 1)[0]}"
+
+            # 3. Získanie posledného segmentu cesty (názov súboru / repozitára)
+            norm_path = clean_url.replace('\\', '/').rstrip('/')
+            last_segment = norm_path.split('/')[-1] if '/' in norm_path else norm_path
+
+            # 4. Orezanie git prípony .git
+            if last_segment.lower().endswith('.git'):
+                last_segment = last_segment[:-4]
+
+            # 5. Orezanie archívnych prípon (.tar.gz, .whl, .zip, atď.)
+            last_segment = re.sub(r'\.(?:tar\.gz|tar\.bz2|tar\.xz|tgz|whl|zip|egg)$', '', last_segment, flags=re.IGNORECASE)
+
+            # 6. Orezanie čísla verzie na konci súboru (napr. emoji-2.2.0 -> emoji)
+            last_segment = re.sub(r'-v?\d+(?:\.\d+)+(?:[-._]?[a-zA-Z0-9]+)*$', '', last_segment)
+
+            match = re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9_.\-]*[A-Za-z0-9])?", last_segment)
+            return match.group(0) if match else None
 
         # 3. Štandardný PEP 508 názov balíčka (napr. "requests>=2.25.1", "Flask[async]")
         match = re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9_.\-]*[A-Za-z0-9])?(?=[^A-Za-z0-9_.\-]|$)", token)

@@ -786,7 +786,10 @@
     "btn_yes": "Áno",
     "btn_no": "Nie",
 
-    "tooltip_update_available": "Dostupná nová verzia: v{0}\nKliknite pre stiahnutie"
+    "tooltip_update_available": "Dostupná nová verzia: v{0}\nKliknite pre stiahnutie",
+
+    "apt_op_failed_state_unchanged": "⚠️ [APT] Operácia zlyhala — APT stav ostáva nezmenený.",
+    "apt_pip_op_failed_code": "⚠️ [APT] Pip operácia zlyhala (kód={0}) — APT stav ostáva nezmenený."
     
 
 }

@@ -1,3 +1,4 @@
+#----------------------------------------
 # Súbor: core/logic/sluzby/apt_logic.py
 #----------------------------------------
 
@@ -192,6 +193,48 @@ class AptLogic:
 
         return dependents
 
+    # >>> DOPLNENÉ: Pomocná metóda na extrakciu voliteľných [extras] závislostí z METADATA súborov
+    @staticmethod
+    def _get_all_requires_from_metadata(venv_path: str, pkg_name: str) -> list[str]:
+        """
+        Načíta všetky závislosti (vrátane [extras] ako requests[socks] -> pysocks)
+        priamo z .dist-info/METADATA súboru balíčka.
+        """
+        reqs = set()
+        norm_target = AptLogic._normalize(pkg_name)
+        site_folder = "Lib" if os.name == 'nt' else "lib"
+        
+        site_pkgs = os.path.join(venv_path, site_folder, "site-packages")
+        if not os.path.exists(site_pkgs) and os.name != 'nt':
+            import glob
+            matches = glob.glob(os.path.join(venv_path, "lib", "python*", "site-packages"))
+            if matches:
+                site_pkgs = matches[0]
+
+        if not os.path.exists(site_pkgs):
+            return []
+
+        try:
+            for entry in os.listdir(site_pkgs):
+                if entry.lower().endswith(".dist-info"):
+                    folder_pkg = AptLogic._normalize(entry.split("-")[0])
+                    if folder_pkg == norm_target:
+                        meta_file = os.path.join(site_pkgs, entry, "METADATA")
+                        if os.path.isfile(meta_file):
+                            with open(meta_file, "r", encoding="utf-8", errors="replace") as f:
+                                for line in f:
+                                    if line.startswith("Requires-Dist:"):
+                                        val = line.split(":", 1)[1].strip()
+                                        dep_raw = val.split(";")[0].strip()
+                                        clean_dep = AptLogic._extract_package_name(dep_raw)
+                                        if clean_dep:
+                                            reqs.add(AptLogic._normalize(clean_dep))
+        except Exception:
+            pass
+
+        return list(reqs)
+    # <<< KONIEC DOPLNENIA
+
     @staticmethod
     def get_requires_for_package(venv_path, pkg_name, manager_type="pip"):
         reqs = []
@@ -208,7 +251,7 @@ class AptLogic:
                     if val: 
                         reqs = [AptLogic._normalize(r) for r in val.split(",") if r.strip()]
 
-            # >>> ZMENA: Robustnejšie zistenie závislostí pre pip -e (fallback pri zámene pomlčiek a podčiarkovníkov)
+            # Robustnejšie zistenie závislostí pre pip -e (fallback pri zámene pomlčiek a podčiarkovníkov)
             if not reqs and ("-" in pkg_name or "_" in pkg_name):
                 alt_name = pkg_name.replace("-", "_") if "-" in pkg_name else pkg_name.replace("_", "-")
                 try:
@@ -221,7 +264,13 @@ class AptLogic:
                                 reqs = [AptLogic._normalize(r) for r in val.split(",") if r.strip()]
                 except Exception:
                     pass
-            # <<< KONIEC ZMENY
+
+            # >>> DOPLNENÉ: Zlúčenie štandardných Requires s voliteľnými extras závislosťami
+            metadata_reqs = AptLogic._get_all_requires_from_metadata(venv_path, pkg_name)
+            for m_req in metadata_reqs:
+                if m_req not in reqs:
+                    reqs.append(m_req)
+            # <<< KONIEC DOPLNENIA
 
         except Exception: 
             pass
@@ -268,11 +317,16 @@ class AptLogic:
                             graph[current_pkg] = []
                         elif line.startswith("Requires:") and current_pkg:
                             reqs = line.split(":", 1)[1].strip()
-                            if reqs:
-                                graph[current_pkg] = [
-                                    AptLogic._normalize(AptLogic._extract_package_name(r))
-                                    for r in reqs.split(",") if r.strip()
-                                ]
+                            base_reqs = [
+                                AptLogic._normalize(AptLogic._extract_package_name(r))
+                                for r in reqs.split(",") if r.strip()
+                            ] if reqs else []
+
+                            # >>> DOPLNENÉ: Obohatenie grafu závislostí o extras závislosti z METADATA
+                            meta_reqs = AptLogic._get_all_requires_from_metadata(venv_path, current_pkg)
+                            all_deps = set(base_reqs + meta_reqs)
+                            graph[current_pkg] = list(all_deps)
+                            # <<< KONIEC DOPLNENIA
                                 
             except Exception:
                 return None
@@ -365,12 +419,9 @@ class AptLogic:
             state_explicit = AptLogic.load_explicit_list(venv_path)
             explicit_roots = state_explicit.copy()
 
-            # >>> OPRAVA: normalizácia released_packages MUSÍ prebehnúť PRED pip-e blokom,
-            # inak porovnanie "e_name not in released_packages" nižšie nesedí (case/oddeľovače).
             if not released_packages:
                 released_packages = []
             released_packages = [AptLogic._normalize(p) for p in released_packages]
-            # <<< KONIEC OPRAVY
 
             # 1. Poistka: Requirements (Rekurzívne cez Parser + pip-e prepojenie)
             parsed_reqs = set()
@@ -382,15 +433,12 @@ class AptLogic:
                     parsed_reqs = {AptLogic._normalize(p) for p in raw_parsed}
                     explicit_roots.update(parsed_reqs)
 
-                # >>> ZMENA: Podpora pre pip -e balíčky (zaradenie medzi explicitné korene bez nutnosti zápisu v requirements.txt)
-                # OPRAVA: ak bol balíček práve odstránený/zakomentovaný v requirements.txt (je v released_packages),
-                # NESMIE sa tu znovu automaticky "ochrániť" len preto, že je fyzicky ešte nainštalovaný.
+                # Podpora pre pip -e balíčky
                 editable_pkgs = AptLogic.get_editable_packages(venv_path)
                 for e_pkg in editable_pkgs:
                     e_name = AptLogic._normalize(e_pkg.get("name", ""))
                     if e_name and e_name not in released_packages:
                         explicit_roots.add(e_name)
-                # <<< KONIEC ZMENY
             except Exception:
                 pass
 
@@ -422,7 +470,6 @@ class AptLogic:
 
             auto_needed = get_all_required(explicit_roots)
 
-            # (normalizácia released_packages už prebehla vyššie, pred pip-e blokom)
             released_tree = get_all_required(released_packages)
             released_tree.update(released_packages)
 
@@ -483,4 +530,3 @@ class AptLogic:
                     process.kill()
                 log_callback(LanguageManager.get("apt_err", "❌ [APT] Chyba pri odinštalovaní: {0}").format(e))
                 return False
-

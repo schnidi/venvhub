@@ -793,6 +793,9 @@
     "btn_yes": "Yes",
     "btn_no": "No",
 
-    "tooltip_update_available": "New version available: v{0}\nClick to download"
+    "tooltip_update_available": "New version available: v{0}\nClick to download",
+
+    "apt_op_failed_state_unchanged": "⚠️ [APT] Operation failed — APT state remains unchanged.",
+    "apt_pip_op_failed_code": "⚠️ [APT] Pip operation failed (code={0}) — APT state remains unchanged."
 
 }

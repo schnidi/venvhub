@@ -33,7 +33,16 @@ class PipWorker:
         self.success = False
         try:
             CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
-            process = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=CREATE_NO_WINDOW)
+            # >>> OPRAVA KÓDOVANIA (UTF-8 pre UV a moderné pip výstupy)
+            process = subprocess.Popen(
+                self.cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.STDOUT, 
+                text=True, 
+                encoding="utf-8", 
+                errors="replace", 
+                creationflags=CREATE_NO_WINDOW
+            )
             for line in process.stdout: 
                 self.signals.log_message.emit(line.strip())
             process.wait()
@@ -159,7 +168,16 @@ class UpdateAllWorker:
             msg_step3 = LanguageManager.get("msg_step3_upgrade", "\n--- Krok 3: Aktualizujem nájdené balíčky... ---")
             self.signals.log_message.emit(msg_step3)
             
-            upgrade_process = subprocess.Popen(cmd_upgrade, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=CREATE_NO_WINDOW)
+            upgrade_process = subprocess.Popen(
+                cmd_upgrade, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.STDOUT, 
+                text=True, 
+                encoding="utf-8", 
+                errors="replace", 
+                creationflags=CREATE_NO_WINDOW
+            )
+            # <<< KONIEC OPRAVY
             for line in upgrade_process.stdout: self.signals.log_message.emit(line.strip())
             upgrade_process.wait()
 

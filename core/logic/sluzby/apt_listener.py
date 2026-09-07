@@ -120,11 +120,19 @@ class AptListener:
 
             should_autoremove = is_uninstall or is_upgrade
 
-            def apt_callback(result=0):
-                success = (result == 0 or result is True) if isinstance(result, (int, bool)) else getattr(worker, 'success', True)
+            def apt_callback(*args):
+                # Zistíme reálny stav úspechu z workera alebo z odovzdaného argumentu
+                if args and isinstance(args[0], (int, bool)):
+                    success = (args[0] == 0 or args[0] is True)
+                else:
+                    success = getattr(worker, 'success', False)
                 
                 if not success:
-                    log_widget.append("⚠️ [APT] Operácia zlyhala — APT stav ostáva nezmenený.")
+                    msg = LanguageManager.get(
+                        "apt_op_failed_state_unchanged",
+                        "⚠️ [APT] Operácia zlyhala — APT stav ostáva nezmenený."
+                    )
+                    log_widget.append(msg)
                 else:
                     for pkg in uninstalled_pkgs:
                         AptLogic.unmark_explicit(worker.venv_path, pkg)
@@ -188,7 +196,11 @@ class AptListener:
 
             def on_finished(exit_code):
                 if exit_code != 0:
-                    self.log(f"⚠️ [APT] Pip operácia zlyhala (kód={exit_code}) — APT stav ostáva nezmenený.")
+                    msg = LanguageManager.get(
+                        "apt_pip_op_failed_code",
+                        "⚠️ [APT] Pip operácia zlyhala (kód={0}) — APT stav ostáva nezmenený."
+                    ).format(exit_code)
+                    self.log(msg)
                     return
                 for pkg in uninstalled_pkgs:
                     AptLogic.unmark_explicit(self.venv_path, pkg)

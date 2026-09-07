@@ -65,7 +65,10 @@ class SkinManager:
             # Získame absolútnu cestu k témam a upravíme lomítka na dopredné (pre QSS)
             themes_abs_path = Paths.get_themes_dir().replace('\\', '/')
             # Nahradíme zástupný znak reálnou cestou
+            content = content.replace("url({{CORE_THEMES_DIR}}", f'url("{themes_abs_path}')
             content = content.replace("{{CORE_THEMES_DIR}}", themes_abs_path)
+            import re
+            content = re.sub(r'url\("([^"\)]+)\)', r'url("\1")', content)
             # ---------------------------------------
             
             app.setStyleSheet(content)
