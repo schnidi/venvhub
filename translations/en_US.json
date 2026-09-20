@@ -796,6 +796,9 @@
     "tooltip_update_available": "New version available: v{0}\nClick to download",
 
     "apt_op_failed_state_unchanged": "⚠️ [APT] Operation failed — APT state remains unchanged.",
-    "apt_pip_op_failed_code": "⚠️ [APT] Pip operation failed (code={0}) — APT state remains unchanged."
+    "apt_pip_op_failed_code": "⚠️ [APT] Pip operation failed (code={0}) — APT state remains unchanged.",
+
+    "clone_local_pkgs_transferred": "🔗 Local packages (VenvHub Hook) transferred successfully.",
+    "clone_apt_state_transferred": "🧠 APT history and dependency rules transferred successfully."
 
 }

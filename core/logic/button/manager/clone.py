@@ -88,14 +88,20 @@ class CloneWorker(QObject):
         return process.returncode, "\n".join(output_history)
         
     def _clone_local_packages(self):
-        """Kopíruje VenvHub Import Hooky pre lokálne balíčky do nového Venvu."""
+        """Kopíruje VenvHub Import Hooky pre lokálne balíčky a stav APT do nového Venvu."""
         site_folder = "Lib" if os.name == 'nt' else "lib"
         source_site = os.path.join(self.source_venv_path, site_folder, "site-packages")
         target_site = os.path.join(self.target_venv_path, site_folder, "site-packages")
         
-        files_to_copy = ["venvhub.json", "venvhub_bootstrap.py", "venvhub_bootstrap.pth"]
+        files_to_copy = [
+            "venvhub.json", 
+            "venvhub_bootstrap.py", 
+            "venvhub_bootstrap.pth",
+            "venvhub_apt_state.json"  # Prenos APT stavu a explicitných balíčkov
+        ]
         
         has_local = False
+        has_apt = False
         os.makedirs(target_site, exist_ok=True)
         
         for file_name in files_to_copy:
@@ -104,12 +110,20 @@ class CloneWorker(QObject):
             if os.path.exists(src_f):
                 try:
                     shutil.copy2(src_f, dst_f)
-                    has_local = True
+                    if file_name == "venvhub_apt_state.json":
+                        has_apt = True
+                    else:
+                        has_local = True
                 except Exception as e:
                     clone_logger.write(f"Nepodarilo sa skopírovať {file_name}: {e}")
                     
         if has_local:
-            self.progress_msg.emit("🔗 Lokálne balíčky (VenvHub Hook) boli úspešne prenesené.")
+            msg_local = LanguageManager.get("clone_local_pkgs_transferred", "🔗 Lokálne balíčky (VenvHub Hook) boli úspešne prenesené.")
+            self.progress_msg.emit(msg_local)
+            
+        if has_apt:
+            msg_apt = LanguageManager.get("clone_apt_state_transferred", "🧠 APT história a pravidlá závislostí boli úspešne prenesené.")
+            self.progress_msg.emit(msg_apt)
 
     def run(self):
         try:

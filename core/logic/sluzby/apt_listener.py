@@ -138,7 +138,9 @@ class AptListener:
                         AptLogic.unmark_explicit(worker.venv_path, pkg)
                     if not is_upgrade and not is_req_install:
                         for pkg in installed_pkgs:
-                            AptLogic.mark_as_explicit(worker.venv_path, pkg)
+                            # Ak je balíček prinesenou závislosťou iného balíčka, nezapisujeme ho do explicit
+                            if not AptLogic.is_package_required_by_others(worker.venv_path, core, pkg):
+                                AptLogic.mark_as_explicit(worker.venv_path, pkg)
                     if is_req_install:
                         AptLogic.install_sync(core, worker.venv_path, log_widget.append)
                     if should_autoremove:
@@ -206,7 +208,9 @@ class AptListener:
                     AptLogic.unmark_explicit(self.venv_path, pkg)
                 if not is_upgrade and not is_req_install:
                     for pkg in installed_pkgs:
-                        AptLogic.mark_as_explicit(self.venv_path, pkg)
+                        # Ak je balíček prinesenou závislosťou iného balíčka, nezapisujeme ho do explicit
+                        if not AptLogic.is_package_required_by_others(self.venv_path, core, pkg):
+                            AptLogic.mark_as_explicit(self.venv_path, pkg)
                 if is_req_install:
                     AptLogic.install_sync(core, self.venv_path, self.log)
                 if should_autoremove:

@@ -789,7 +789,10 @@
     "tooltip_update_available": "Dostupná nová verzia: v{0}\nKliknite pre stiahnutie",
 
     "apt_op_failed_state_unchanged": "⚠️ [APT] Operácia zlyhala — APT stav ostáva nezmenený.",
-    "apt_pip_op_failed_code": "⚠️ [APT] Pip operácia zlyhala (kód={0}) — APT stav ostáva nezmenený."
+    "apt_pip_op_failed_code": "⚠️ [APT] Pip operácia zlyhala (kód={0}) — APT stav ostáva nezmenený.",
+
+    "clone_local_pkgs_transferred": "🔗 Lokálne balíčky (VenvHub Hook) boli úspešne prenesené.",
+    "clone_apt_state_transferred": "🧠 APT história a pravidlá závislostí boli úspešne prenesené."
     
 
 }

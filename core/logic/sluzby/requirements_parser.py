@@ -242,22 +242,46 @@ class RequirementsParser:
                     if editable_match:
                         raw_target = editable_match.group(1).strip().strip('\'"')
                         target_dir = None
+
+                        # Ak to NIE JE git/url odkaz (napr. -e git+https://...)
+                        is_vcs = raw_target.startswith(RequirementsParser._URL_SCHEMES) or raw_target.startswith(('git@', 'http://', 'https://'))
                         
-                        if pip_e_root:
-                            # Pre editable balíčky sa striktne používa pip_e_root priečinok
-                            folder_name = os.path.basename(raw_target)
-                            target_dir = os.path.join(pip_e_root, folder_name)
-                        else:
-                            current_dir = os.path.dirname(abs_path)
-                            target_dir = os.path.realpath(os.path.join(current_dir, raw_target))
+                        if not is_vcs:
+                            # 1. Kaskáda: Existuje cesta priamo na disku? (plná absolútna cesta napr. F:/.../pip1)
+                            norm_raw = os.path.normpath(raw_target)
+                            if os.path.isdir(norm_raw):
+                                target_dir = norm_raw
                             
-                        if target_dir and os.path.isdir(target_dir):
-                            pkg_name = RequirementsParser._get_package_name_from_dir(target_dir)
-                            if pkg_name:
-                                normalized = RequirementsParser._normalize(pkg_name)
-                                if normalized:
-                                    packages.add(normalized)
-                                continue
+                            # 2. Kaskáda: Existuje relatívne voči priečinku projektu / requirements.txt?
+                            elif os.path.isdir(os.path.normpath(os.path.join(os.path.dirname(abs_path), raw_target))):
+                                target_dir = os.path.normpath(os.path.join(os.path.dirname(abs_path), raw_target))
+
+                            # 3. Kaskáda: Existuje priečinok v nastavenom pip_e_root?
+                            elif pip_e_root:
+                                folder_name = os.path.basename(raw_target.rstrip('/\\'))
+                                candidate = os.path.normpath(os.path.join(pip_e_root, folder_name))
+                                if os.path.isdir(candidate):
+                                    target_dir = candidate
+
+                            # Ak sme našli platný priečinok na disku, načítame skutočné meno zo setup.py / pyproject.toml
+                            if target_dir and os.path.isdir(target_dir):
+                                pkg_name = RequirementsParser._get_package_name_from_dir(target_dir)
+                                if pkg_name:
+                                    normalized = RequirementsParser._normalize(pkg_name)
+                                    if normalized:
+                                        packages.add(normalized)
+                                        continue
+
+                            # 4. Záloha (Fallback): Ak priečinok neexistuje, použijeme názov z konca cesty
+                            fallback_name = os.path.basename(raw_target.rstrip('/\\'))
+                            if fallback_name:
+                                clean_cand = RequirementsParser._extract_package_name(fallback_name)
+                                if clean_cand:
+                                    normalized = RequirementsParser._normalize(clean_cand)
+                                    if normalized:
+                                        packages.add(normalized)
+                                        continue
+
                         line = raw_target
 
                     # Ignorovanie ostatných direktív pip inštalátora (-f, -i, --extra-index-url atď.)
