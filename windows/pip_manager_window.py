@@ -249,7 +249,7 @@ class PipManagerWindow(QDialog):
         self.worker.moveToThread(self.thread)
 
         self.worker.output_line.connect(self.append_log, Qt.ConnectionType.QueuedConnection)
-        self.worker.finished.connect(self.on_update_all_finished, Qt.ConnectionType.QueuedConnection)
+        self.worker.finished.connect(self._on_update_all_finished, Qt.ConnectionType.QueuedConnection)
         self.worker.error.connect(self.handle_update_error, Qt.ConnectionType.QueuedConnection)
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.cleanup_thread, Qt.ConnectionType.QueuedConnection)
@@ -265,7 +265,7 @@ class PipManagerWindow(QDialog):
         self.log_output.append(f"CHYBA: {err_msg}")
 
     @pyqtSlot(bool)
-    def on_update_all_finished(self, success):
+    def _on_update_all_finished(self, success):
         if success:
             msg = LanguageManager.get("msg_update_finished_refreshing", "Aktualizácia dokončená. Pripravujem obnovu zoznamu...")
             self.log_output.append(msg)
@@ -276,27 +276,24 @@ class PipManagerWindow(QDialog):
             self.set_buttons_enabled(True)
 
     def on_freeze(self):
-        self.safe_stop_thread() # Upraceme staré bežiace vlákna
+        self.safe_stop_thread()
         self.log_output.append("\n--- Spúšťam asynchrónny export (Freeze) ---")
         self.set_buttons_enabled(False)
         manager_type = self.parent().core.package_manager
 
-        # Príprava asynchrónneho vlákna
         self.thread = QThread()
         self.worker = FreezeWorker(self.venv_path, self.project_root, manager_type)
         self.worker.moveToThread(self.thread)
 
-        # Prepojenie signálov
         self.thread.started.connect(self.worker.run)
         self.worker.log_msg.connect(self.append_log, Qt.ConnectionType.QueuedConnection)
-        self.worker.finished_signal.connect(self.on_freeze_finished, Qt.ConnectionType.QueuedConnection)
+        self.worker.finished_signal.connect(self._on_freeze_finished, Qt.ConnectionType.QueuedConnection)
         
-        # Bezpečné uvoľnenie prostriedkov po dokončení
         self.worker.finished_signal.connect(self.cleanup_thread)
         self.thread.start()
 
     @pyqtSlot(bool)
-    def on_freeze_finished(self, success):
+    def _on_freeze_finished(self, success):
         """Vyvolá sa na hlavnom grafickom vlákne po dokončení zápisu do requirements.txt."""
         self.set_buttons_enabled(True)
 

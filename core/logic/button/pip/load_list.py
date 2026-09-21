@@ -23,7 +23,15 @@ class LoadListHandler:
         def run_command(cmd):
             """Pomocná funkcia na spustenie príkazu a vrátenie JSON výsledku."""
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+                # >>> OPRAVA: Pridané encoding="utf-8", errors="replace"
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    encoding="utf-8", 
+                    errors="replace", 
+                    creationflags=CREATE_NO_WINDOW
+                )
                 if result.returncode == 0:
                     return json.loads(result.stdout)
             except Exception:

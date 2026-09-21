@@ -1,5 +1,5 @@
 {
-    "version": "2.5.28",
+    "version": "2.5.29",
     "about_html_sk_SK": "<h2 style='color: #007acc;'>VenvHub Pro</h2><p><b>Verzia:</b> {version}</p><p><b>Autor:</b> Ing. Viliam Schneider</p><p><b>Partner / Nasadené v:</b> Seal and Lube, spol. s r.o.</p><hr><p>Profesionálny nástroj pre správu Python virtuálnych prostredí, hromadné spúšťanie, tvorbu .exe súborov a automatizáciu procesov.</p>",   
     "about_html_en_US": "<h2 style='color: #007acc;'>VenvHub Pro</h2><p><b>Version:</b> {version}</p><p><b>Author:</b> Ing. Viliam Schneider</p><p><b>Partner / Deployed at:</b> Seal and Lube, spol. s r.o.</p><hr><p>Professional tool for managing Python virtual environments, mass execution, .exe file creation, and process automation.</p>"
 }

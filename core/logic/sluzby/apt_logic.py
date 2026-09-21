@@ -243,7 +243,15 @@ class AptLogic:
             cmd = dispatcher.get("show", package_name=pkg_name)
             
             CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
-            res = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+            # >>> OPRAVA: Pridané encoding="utf-8", errors="replace"
+            res = subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                encoding="utf-8", 
+                errors="replace", 
+                creationflags=CREATE_NO_WINDOW
+            )
             
             for line in res.stdout.splitlines():
                 if line.startswith("Requires:"):
@@ -251,12 +259,19 @@ class AptLogic:
                     if val: 
                         reqs = [AptLogic._normalize(r) for r in val.split(",") if r.strip()]
 
-            # Robustnejšie zistenie závislostí pre pip -e (fallback pri zámene pomlčiek a podčiarkovníkov)
+            # Robustnejšie zistenie závislostí pre pip -e (fallback)
             if not reqs and ("-" in pkg_name or "_" in pkg_name):
                 alt_name = pkg_name.replace("-", "_") if "-" in pkg_name else pkg_name.replace("_", "-")
                 try:
                     alt_cmd = dispatcher.get("show", package_name=alt_name)
-                    alt_res = subprocess.run(alt_cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+                    alt_res = subprocess.run(
+                        alt_cmd, 
+                        capture_output=True, 
+                        text=True, 
+                        encoding="utf-8", 
+                        errors="replace", 
+                        creationflags=CREATE_NO_WINDOW
+                    )
                     for line in alt_res.stdout.splitlines():
                         if line.startswith("Requires:"):
                             val = line.replace("Requires:", "").strip()
@@ -265,16 +280,15 @@ class AptLogic:
                 except Exception:
                     pass
 
-            # >>> DOPLNENÉ: Zlúčenie štandardných Requires s voliteľnými extras závislosťami
             metadata_reqs = AptLogic._get_all_requires_from_metadata(venv_path, pkg_name)
             for m_req in metadata_reqs:
                 if m_req not in reqs:
                     reqs.append(m_req)
-            # <<< KONIEC DOPLNENIA
 
         except Exception: 
             pass
         return reqs
+
 
     # =========================================================================
 
@@ -290,7 +304,15 @@ class AptLogic:
             
             try:
                 list_cmd = dispatcher.get("list_json")
-                res_list = subprocess.run(list_cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW, timeout=30)
+                res_list = subprocess.run(
+                    list_cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    encoding="utf-8", 
+                    errors="replace", 
+                    creationflags=CREATE_NO_WINDOW, 
+                    timeout=30
+                )
                 if res_list.returncode != 0:
                     return None
 
@@ -304,7 +326,15 @@ class AptLogic:
                     chunk = installed_pkgs[i:i + chunk_size]
                     try:
                         show_cmd = dispatcher.get("show_multiple", packages=chunk)
-                        res_show = subprocess.run(show_cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW, timeout=30)
+                        res_show = subprocess.run(
+                            show_cmd, 
+                            capture_output=True, 
+                            text=True, 
+                            encoding="utf-8", 
+                            errors="replace", 
+                            creationflags=CREATE_NO_WINDOW, 
+                            timeout=30
+                        )
                         if res_show.returncode != 0:
                             return None
                     except Exception:
