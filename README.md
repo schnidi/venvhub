@@ -4,7 +4,7 @@
 ### 📝 Overview
 VenvHub Pro is a comprehensive, IDE-agnostic management tool for Python developers. It solves real-world problems like dependency hell, project portability, microservice orchestration, and .exe packaging—replacing multiple tools with one smooth, asynchronous, responsive application.
 
-**Version:** v2.5.16  
+**Version:** v2.6.00  
 **Developer:** Ing. Viliam Schneider  
 **Partner / Deployed at:** Seal and Lube, spol. s r.o.
 
