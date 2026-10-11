@@ -25,10 +25,13 @@ VenvHub Pro is a comprehensive, IDE-agnostic management tool for Python develope
 
 ### ✨ Key Features
 
-#### 📦 APT-Style Package Manager & `requirements.txt` Sync
-Forget messy virtual environments. VenvHub introduces Linux-style `apt-get autoremove` logic for Python. It distinguishes between explicitly installed packages and those brought in merely as dependencies.
-* **Smart Synchronization:** If you delete or comment out a package in your `requirements.txt`, clicking the sync/install button tells VenvHub to not only uninstall that package but also automatically clean up all its orphaned dependencies.
-* **Auto-Healing:** Automatically detects and fixes broken Windows backslashes (`\`) in your requirements files before they can crash the PIP installer.
+#### 📦 APT-Style Package Manager & State-Aware Orchestration
+Forget messy virtual environments. VenvHub introduces an action-triggered, state-aware reconciliation engine inspired by Linux's `apt-get autoremove`. It maintains a hidden state file (`venvhub_apt_state.json`) inside your Venv to track exactly what you installed explicitly versus what was pulled in as a dependency.
+
+* **GUI Action Interceptor:** When you install or uninstall packages directly through the VenvHub GUI, a background `AptListener` intercepts the command, updates the explicit state, and immediately triggers an `autoremove` to clean up any orphaned dependencies left behind by uninstalled packages.
+* **External CLI Self-Healing:** What if you open a terminal outside VenvHub and manually type `pip install requests`? VenvHub doesn't break. The next time you trigger an APT-aware action in the GUI (like an update or sync), VenvHub performs a differential scan. It detects the manually installed package, realizes it's not an orphan, safely registers it to the "explicit" list (Self-Healing), and continues working flawlessly.
+* **Requirements.txt Differential Sync:** Synchronization is an on-demand action, not a real-time background task. If you delete or comment out a line in your `requirements.txt`, you simply click the "Sync/Install Requirements" button in VenvHub. The engine calculates a "diff" against its last known cached state, installs any new additions, and safely triggers an `autoremove` on the packages (and their sub-dependencies) that fell out of the file.
+* **Path Auto-Correction:** Before executing any Pip installer logic from a requirements file, the parser detects and automatically fixes broken Windows backslashes (`\`) inside `-e` (editable) local paths to prevent terminal crashes.
 
 #### 🤖 Dual-IDE Integration (VS Code & Cursor AI)
 Native and simultaneous support for both Visual Studio Code and **Cursor AI**. VenvHub dynamically synchronizes Python interpreter paths, local package paths, tasks, and keybindings into both `.vscode` and `.cursor` workspaces without conflicts.
@@ -49,9 +52,18 @@ Group Venvs (e.g., Frontend, Backend, Database) into "Containers." VenvHub launc
 #### 🛠 PyInstaller Builder with Auto-Injector
 A visual tool for creating `.exe` files. Not only does it generate a "Birth Certificate" (JSON metadata about the Python version and packages) and bundle the lightning-fast `uv.exe` installer, but its **Auto-Injector** also detects which VenvHub Local Packages your project uses and dynamically injects their source code and assets into the build (via `--paths` and `--add-data`).
 
-#### 🔗 Local Packages Linker & Editable Installs (`pip -e`)
+#### 🔗 Deep-Injection Local Packages (The VenvHub Linker)
+Sharing custom code across projects is no longer just about editing Python paths. VenvHub’s Linker is a comprehensive Dependency and Configuration Injection system.
+
+* **UAC-Free `sys.meta_path` Linking:** Instead of relying on fragile Windows NTFS Symlinks or Junctions (which often trigger UAC Admin prompts), VenvHub injects a custom `venvhub_bootstrap.py` directly into the Venv's `site-packages`. This hooks into Python's `sys.meta_path`, dynamically routing imports to your shared code folder.
+* **Recursive Payload & PIP Injection:** The Linker reads a `local_meta.json` file inside your shared package. If your local package requires external PIP packages (e.g., `requests`), the Linker automatically downloads and installs them into the active Venv. It also recursively resolves and links any other local packages required.
+* **IDE Workspace Injection:** The Linker doesn't just inject Python paths into `.vscode/settings.json` for IntelliSense (Pylance). It safely injects custom VS Code `tasks` and `keybindings` directly into your project's workspace using a receipt-tracking system (`venvhub_tracker.json`), ensuring your manual workspace settings are never overwritten.
+* **APT-Logic Protection:** The APT-style package manager is fully aware of the Linker. If a linked local package brings in a PIP dependency, the APT logic acts as a shield and strictly **blocks** you from accidentally uninstalling that PIP package via the GUI.
+* **Triggered Autoremove:** When you unlink a local package from your project, the background `AptListener` intercepts the action, realizes the associated PIP dependencies are no longer needed, and automatically triggers an `autoremove` to purge them from the Venv.
+* **PyInstaller Auto-Readiness:** When compiling your project, the PyInstaller Builder automatically reads the Linker state and dynamically injects `--paths` (for code) and `--add-data` (for UI files/assets) for every linked package, ensuring your `.exe` compiles flawlessly without manual path configuration.
+
+#### 🔗 Editable Installs (`pip -e`)
 Share your custom code and libraries across multiple projects without constantly copying them:
-* **Import Hooks Linker:** Instead of problematic Windows Symlinks (which require Admin rights), it links libraries directly at the Python level using `sys.meta_path`. VenvHub also automatically injects these paths into VS Code / Cursor so your IntelliSense works flawlessly.
 * **Editable Packages Manager:** A dedicated UI for managing `pip install -e` projects, fully protected by the APT logic (preventing accidental uninstallation of shared core libraries).
 
 #### 🧳 Portable Mode & Hardware Locking (Security)
