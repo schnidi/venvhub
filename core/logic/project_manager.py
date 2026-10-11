@@ -25,9 +25,19 @@ class ProjectCore:
         self.projects_root = ""
         self.venv_hub_root = ""
         self.local_packages_root = "" 
-        self.pip_e_packages_root = ""  # <--- PRIDANÉ: Cesta pre pip-e balíčky
+        self.pip_e_packages_root = ""
         self.vscode_users_root = ""  
+
+        # --- ODDELENÉ PROFILY PRE VS CODE A CURSOR ---
         self.active_vscode_user = "" 
+        self.active_cursor_user = "" 
+        # ---------------------------------------------
+
+        # --- NASTAVENIA PRE IDE EDITORY ---
+        self.active_ide = "vscode"
+        self.portable_vscode_path = ""
+        self.portable_cursor_path = ""
+        # ----------------------------------
         
         self._active_project = "" 
         self._temp_venv = None 
@@ -52,6 +62,24 @@ class ProjectCore:
         app_root = Paths.get_app_root_path()
         marker_path = os.path.join(app_root, Paths.PORTABLE_MARKER_FILENAME)
         return os.path.exists(marker_path)
+
+    # =========================================================================
+    # --- POMOCNÉ METÓDY PRE ZÍSKANIE / NASTAVENIE PROFILU PODĽA AKTÍVNEHO IDE ---
+    # =========================================================================
+    def get_active_ide_user(self) -> str:
+        """Vráti ID aktívneho profilu podľa toho, ktorý editor (IDE) je momentálne zvolený."""
+        if self.active_ide == "cursor":
+            return self.active_cursor_user
+        return self.active_vscode_user
+
+    def set_active_ide_user(self, user_id: str) -> None:
+        """Nastaví ID profilu pre aktuálne zvolený editor (IDE)."""
+        if self.active_ide == "cursor":
+            self.active_cursor_user = user_id
+        else:
+            self.active_vscode_user = user_id
+
+    # =========================================================================
 
     @property
     def active_project(self):
@@ -118,9 +146,19 @@ class ProjectCore:
         self.projects_root = self.cfg.get("projects_root", "")
         self.venv_hub_root = self.cfg.get("venv_hub_root", "")
         self.local_packages_root = self.cfg.get("local_packages_root", "")
-        self.pip_e_packages_root = self.cfg.get("pip_e_packages_root", "") # <--- PRIDANÉ
+        self.pip_e_packages_root = self.cfg.get("pip_e_packages_root", "")
         self.vscode_users_root = self.cfg.get("vscode_users_root", "") 
+
+        # --- NAČÍTANIE ODDELENÝCH PROFILOV ---
         self.active_vscode_user = self.cfg.get("active_vscode_user", "") 
+        self.active_cursor_user = self.cfg.get("active_cursor_user", "") 
+        # -------------------------------------
+
+        # --- NAČÍTANIE NASTAVENÍ IDE ---
+        self.active_ide = self.cfg.get("active_ide", "vscode")
+        self.portable_vscode_path = self.cfg.get("portable_vscode_path", "")
+        self.portable_cursor_path = self.cfg.get("portable_cursor_path", "")
+        # -------------------------------
         
         # 1. DEKÓDOVANIE Z UUID DO REÁLNYCH CIEST V RAM
         if self.is_portable:
@@ -144,7 +182,7 @@ class ProjectCore:
         cleaned_project_data = self._process_and_clean_data(raw_project_data)
         self.project_data = cleaned_project_data
         
-        # 3. Uloženie len ak sa dáta skutočne zmenili (ochrana pred vymazaním configu)
+        # 3. Uloženie len ak sa dáta skutočne zmenili
         if not (root_missing and cleaned_project_data == raw_project_data):
             self.save_config()
 
@@ -161,7 +199,6 @@ class ProjectCore:
         if changed_l:
             self.local_packages_root = new_local_root
 
-        # <--- PRIDANÉ: Dekódovanie cesty pre pip-e balíčky
         new_pip_e_root, changed_pe = PortablePathLogic.resolve_path(self.pip_e_packages_root)
         if changed_pe:
             self.pip_e_packages_root = new_pip_e_root
@@ -169,6 +206,16 @@ class ProjectCore:
         new_vscode_root, changed_v = PortablePathLogic.resolve_path(self.vscode_users_root)
         if changed_v:
             self.vscode_users_root = new_vscode_root
+
+        # --- PRENOSNÉ OPRAVY CIEST PRE IDE EDITORY ---
+        new_port_vscode, changed_pvc = PortablePathLogic.resolve_path(self.portable_vscode_path)
+        if changed_pvc:
+            self.portable_vscode_path = new_port_vscode
+
+        new_port_cursor, changed_pcur = PortablePathLogic.resolve_path(self.portable_cursor_path)
+        if changed_pcur:
+            self.portable_cursor_path = new_port_cursor
+        # ---------------------------------------------
 
     def _process_and_clean_data(self, raw_data):
         clean_data = {}
@@ -196,7 +243,7 @@ class ProjectCore:
                     if changed:
                         venv_path = fixed_venv
                         # ========================================================
-                        # OPRAVA PRE VS CODE: Tichá úprava settings.json
+                        # OPRAVA PRE VS CODE / IDE: Tichá úprava settings.json
                         # ========================================================
                         VSCodeIntegration.repair_portable_path(full_project_path, fixed_venv, self.local_packages_root)
                 
@@ -249,12 +296,14 @@ class ProjectCore:
         if self._active_project and self._active_project not in self.project_data:
              self.project_data[self._active_project] = {}
 
-        # Pripravíme si kópie, ktoré budeme upravovať výhradne pre zápis do JSONu
+        # Pripravíme si kópie pre zápis do JSONu
         s_projects_root = self.projects_root
         s_venv_hub_root = self.venv_hub_root
         s_local_packages_root = self.local_packages_root
-        s_pip_e_packages_root = self.pip_e_packages_root # <--- PRIDANÉ
+        s_pip_e_packages_root = self.pip_e_packages_root
         s_vscode_users_root = self.vscode_users_root
+        s_portable_vscode_path = self.portable_vscode_path
+        s_portable_cursor_path = self.portable_cursor_path
         s_project_data = self.project_data.copy()
         s_multi_groups = self.multi_groups.copy()
 
@@ -263,8 +312,10 @@ class ProjectCore:
             s_projects_root = PortablePathLogic.encode_path(self.projects_root)
             s_venv_hub_root = PortablePathLogic.encode_path(self.venv_hub_root)
             s_local_packages_root = PortablePathLogic.encode_path(self.local_packages_root)
-            s_pip_e_packages_root = PortablePathLogic.encode_path(self.pip_e_packages_root) # <--- PRIDANÉ
+            s_pip_e_packages_root = PortablePathLogic.encode_path(self.pip_e_packages_root)
             s_vscode_users_root = PortablePathLogic.encode_path(self.vscode_users_root)
+            s_portable_vscode_path = PortablePathLogic.encode_path(self.portable_vscode_path)
+            s_portable_cursor_path = PortablePathLogic.encode_path(self.portable_cursor_path)
             
             # Kódovanie ciest pre jednotlivé Venvy projektov
             s_project_data = {}
@@ -290,9 +341,13 @@ class ProjectCore:
             "projects_root": s_projects_root,
             "venv_hub_root": s_venv_hub_root,
             "local_packages_root": s_local_packages_root,
-            "pip_e_packages_root": s_pip_e_packages_root, # <--- PRIDANÉ
+            "pip_e_packages_root": s_pip_e_packages_root,
             "vscode_users_root": s_vscode_users_root, 
             "active_vscode_user": self.active_vscode_user,
+            "active_cursor_user": self.active_cursor_user,
+            "active_ide": self.active_ide,
+            "portable_vscode_path": s_portable_vscode_path,
+            "portable_cursor_path": s_portable_cursor_path,
             "active_project": self._active_project,
             "run_mode": self.run_mode,
             "last_pos": self.last_pos,

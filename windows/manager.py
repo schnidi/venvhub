@@ -41,8 +41,9 @@ from windows.local_packages_window import LocalPackagesWindow
 
 from windows.vscode_user import VSCodeUserWindow
 from core.logic.vscode_user.profile_manager import VSCodeProfileManager
-from core.logic.vscode_user.start_vs_code_user import VSCodeLauncher # <--- PRIDANÝ IMPORT
+from core.logic.vscode_user.start_vs_code_user import VSCodeLauncher
 from core.logic.sluzby.windows_location import WindowLocation
+from core.logic.box.ide_settings import IDESettingsHandler
 
 
 class MasterManager(QWidget):
@@ -54,7 +55,6 @@ class MasterManager(QWidget):
         self.core = core
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        # Povolenie vykresľovania QSS rámčekov pre toto okno
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         uic.loadUi(Paths.get_ui_file_path("manager.ui"), self)
 
@@ -104,29 +104,37 @@ class MasterManager(QWidget):
         
         # Prepojíme ukladanie skupín so synchronizáciou Kontajnera
         self.config_changed.connect(self.autostart_window.sync_with_core)
+
+        # --- PASÍVNY LISTENER PRE IDE V RIADKOCH TABUĽKY ---
+        IDESettingsHandler.connect_ide_changed(self.on_ide_state_changed)
         
         self.retranslate_ui()
         self.refresh_ui_from_config()
         WindowLocation.restore_position(self, "manager_window")
 
+    def on_ide_state_changed(self, payload=None):
+        """Pasívny listener: Aktualizuje stav IDE tlačidiel vo všetkých riadkoch tabuľky."""
+        for row in range(self.table_venvs.rowCount()):
+            act = self.table_venvs.cellWidget(row, 3)
+            if act and hasattr(act, 'btn_vscode'):
+                IDESettingsHandler.apply_ide_button_state(act.btn_vscode, self.core)
 
     def closeEvent(self, event):
-        """Uloží pozíciu okna tesne predtým, než sa Správca zatvorí."""
+        """Uloží pozíciu okna a odhlási odber signálu."""
         WindowLocation.save_position(self, "manager_window")
+        IDESettingsHandler.disconnect_ide_changed(self.on_ide_state_changed)
         event.accept()
 
     def retranslate_ui(self):
         LanguageManager.translate_ui(self)
         
-        # 1. Získame preklad pre Manažéra zo slovníka
         title_text = LanguageManager.get("manager_window_title", "VenvHub Pro - Správca")
         self.setWindowTitle(title_text)
         
-        # 2. PRIAME ODOVZDANIE DO TITLE BARU (Stará funkčná metóda):
         if hasattr(self, 'title_bar') and self.title_bar:
             self.title_bar.lbl_title.setText(title_text)
         
-        # 3. Preklady záložiek
+        # Preklady záložiek
         self.tab_widget.setTabText(0, LanguageManager.get("tab_venvs", "Správa Venvs"))
         self.tab_widget.setTabText(1, LanguageManager.get("tab_multi", "Hromadné Spúšťanie (Multi-run)"))
         self.tab_widget.setTabText(2, LanguageManager.get("tab_container", "Kontajner / Autostart"))
@@ -153,7 +161,8 @@ class MasterManager(QWidget):
         self.btn_save_group.setText(LanguageManager.get("btn_save_group", "Uložiť zmeny v skupine"))
         self.tree_all_projects.headerItem().setText(0, LanguageManager.get("col_project_venv", "Projekt / Venv"))
         
-        if not self.table_group_members.horizontalHeaderItem(0): self.table_group_members.setHorizontalHeaderLabels(["", "", ""])
+        if not self.table_group_members.horizontalHeaderItem(0): 
+            self.table_group_members.setHorizontalHeaderLabels(["", "", ""])
         self.table_group_members.horizontalHeaderItem(0).setText(LanguageManager.get("col_project", "Projekt"))
         self.table_group_members.horizontalHeaderItem(1).setText(LanguageManager.get("col_venv_name", "Venv"))
         self.table_group_members.horizontalHeaderItem(2).setText(LanguageManager.get("col_script", "Spúšťací skript"))
@@ -168,6 +177,13 @@ class MasterManager(QWidget):
         self.group_paths.setTitle(LanguageManager.get("group_paths", "Základné cesty"))
         if hasattr(self, 'lbl_pip_e_pkg'):
             self.lbl_pip_e_pkg.setText(LanguageManager.get("lbl_pip_e_pkg", "Lokálne balíčky (pip -e):"))
+        if hasattr(self, 'lbl_active_ide'):
+            self.lbl_active_ide.setText(LanguageManager.get("lbl_active_ide", "Predvolený editor (IDE):"))
+        if hasattr(self, 'lbl_portable_vscode'):
+            self.lbl_portable_vscode.setText(LanguageManager.get("lbl_portable_vscode", "Prenosný VS Code:"))
+        if hasattr(self, 'lbl_portable_cursor'):
+            self.lbl_portable_cursor.setText(LanguageManager.get("lbl_portable_cursor", "Prenosný Cursor:"))
+
         self.group_themes.setTitle(LanguageManager.get("group_themes", "Vzhľad aplikácie (Skiny)"))
         self.lbl_active_theme.setText(LanguageManager.get("lbl_active_theme", "Aktívna téma:"))
         self.btn_import_theme.setText(LanguageManager.get("btn_import_theme", "Importovať tému..."))
@@ -177,6 +193,9 @@ class MasterManager(QWidget):
             self.lbl_pkg_manager.setText(LanguageManager.get("lbl_pkg_manager", "Predvolený inštalátor:"))
             self.combo_pkg_manager.setItemText(0, LanguageManager.get("opt_pip", "Základný (Pip)"))
             self.combo_pkg_manager.setItemText(1, LanguageManager.get("opt_uv", "Ultra rýchly (UV - Astral)"))
+
+        if hasattr(self, 'combo_active_ide'):
+            IDESettingsHandler.populate_combo(self.combo_active_ide, self.core)
         
         self.refresh_table() 
         self.populate_projects_tree()
@@ -210,6 +229,22 @@ class MasterManager(QWidget):
             
         if hasattr(self, 'combo_vscode_user'):
             self.combo_vscode_user.currentIndexChanged.connect(self.on_vscode_user_changed)
+
+        if hasattr(self, 'combo_active_ide'):
+            def on_ide_changed(idx):
+                IDESettingsHandler.handle_selection_change(self.combo_active_ide, self.core, self.config_changed)
+                self.populate_vscode_users_combo()
+
+            self.combo_active_ide.currentIndexChanged.connect(on_ide_changed)
+
+        if hasattr(self, 'btn_set_portable_vscode'):
+            self.btn_set_portable_vscode.clicked.connect(
+                lambda: IDESettingsHandler.browse_portable_path(self, self.core, "vscode", self.edit_portable_vscode, self.combo_active_ide, self.config_changed)
+            )
+        if hasattr(self, 'btn_set_portable_cursor'):
+            self.btn_set_portable_cursor.clicked.connect(
+                lambda: IDESettingsHandler.browse_portable_path(self, self.core, "cursor", self.edit_portable_cursor, self.combo_active_ide, self.config_changed)
+            )
         
         self.btn_create_venv.clicked.connect(lambda: CreateVenvHandler.run(self, self.core, self.py_list))
         self.table_venvs.itemSelectionChanged.connect(self.on_venv_selected)
@@ -272,7 +307,9 @@ class MasterManager(QWidget):
         else:
             self.pip_window.close()
             self.pip_window = PipManagerWindow(self, self.selected_venv_path, project_root)
-        self.pip_window.show(); self.pip_window.raise_(); self.pip_window.activateWindow()
+        self.pip_window.show()
+        self.pip_window.raise_()
+        self.pip_window.activateWindow()
 
     def open_local_packages_window(self):
         if not self.selected_venv_path:
@@ -306,13 +343,11 @@ class MasterManager(QWidget):
         self.pip_e_window.activateWindow()
 
     def open_vscode_user_window(self):
-        """Otvorí okno pre správu VS Code používateľských profilov."""
+        """Otvorí okno pre správu používateľských profilov pre aktuálne zvolený editor."""
         if self.vscode_user_window is not None:
             self.vscode_user_window.close()
             
         self.vscode_user_window = VSCodeUserWindow(self.core, self)
-        
-        # --- ZMENA: Ak vytvorím/vymažem/nastavím profil, synchronizujem to okamžite ---
         self.vscode_user_window.profiles_changed.connect(self.on_vscode_profiles_changed_externally)
         
         self.vscode_user_window.show()
@@ -320,12 +355,12 @@ class MasterManager(QWidget):
         self.vscode_user_window.activateWindow()
 
     def on_vscode_profiles_changed_externally(self):
-        """Vyvolá sa, ak sa v podrobnom okne VS Code Users pridá/zmaže/zvolí profil."""
+        """Vyvolá sa, ak sa v podrobnom okne používateľov pridá/zmaže/zvolí profil."""
         self.populate_vscode_users_combo()
-        self.config_changed.emit() # Dá signál MiniBaru, ktorý to prenesie do Rýchlych nastavení
+        self.config_changed.emit()
 
     def populate_vscode_users_combo(self):
-        """Načíta a naplní zoznam dostupných profilov do ComboBoxu v Nastaveniach."""
+        """Načíta a naplní zoznam dostupných profilov do ComboBoxu v Nastaveniach podľa aktívneho IDE."""
         if not hasattr(self, 'combo_vscode_user'): return
         
         self.combo_vscode_user.blockSignals(True)
@@ -333,13 +368,17 @@ class MasterManager(QWidget):
         self.combo_vscode_user.addItem(LanguageManager.get("vscode_user_none", "--- Žiadny ---"), "")
         
         root_path = getattr(self.core, 'vscode_users_root', '')
+        active_ide = getattr(self.core, 'active_ide', 'vscode')
+
         if root_path and os.path.exists(root_path):
-            profiles = VSCodeProfileManager.get_profiles(root_path)
-            for p in profiles:
-                display_text = f"{p['display_name']} ({p['id']})"
-                self.combo_vscode_user.addItem(display_text, p["id"])
+            profiles_dir = VSCodeProfileManager.get_ide_profiles_dir(root_path, active_ide)
+            if os.path.exists(profiles_dir):
+                profiles = VSCodeProfileManager.get_profiles(profiles_dir)
+                for p in profiles:
+                    display_text = f"{p['display_name']} ({p['id']})"
+                    self.combo_vscode_user.addItem(display_text, p["id"])
                 
-        active_user = getattr(self.core, 'active_vscode_user', '')
+        active_user = self.core.get_active_ide_user()
         idx = self.combo_vscode_user.findData(active_user)
         if idx != -1:
             self.combo_vscode_user.setCurrentIndex(idx)
@@ -354,19 +393,19 @@ class MasterManager(QWidget):
         
         selected_user_id = self.combo_vscode_user.itemData(index)
         
-        if selected_user_id != getattr(self.core, 'active_vscode_user', None):
-            self.core.active_vscode_user = selected_user_id
+        if selected_user_id != self.core.get_active_ide_user():
+            self.core.set_active_ide_user(selected_user_id)
             self.core.save_config()
-            self.config_changed.emit() # Dá signál MiniBaru, ktorý to prenesie do Rýchlych nastavení
+            self.config_changed.emit()
             
-            # --- ZMENA: Ak je otvorené aj podrobné okno VS Profilov, aktualizujeme hviezdičku aj tam ---
             if hasattr(self, 'vscode_user_window') and self.vscode_user_window and self.vscode_user_window.isVisible():
                 self.vscode_user_window.refresh_profiles_list()
 
     def open_pip_manager_context(self, position):
         index = self.table_venvs.indexAt(position)
         if not index.isValid(): return
-        self.table_venvs.selectRow(index.row()); self.on_venv_selected()
+        self.table_venvs.selectRow(index.row())
+        self.on_venv_selected()
         if self.selected_venv_path:
             menu = QMenu()
             action_manage = menu.addAction(LanguageManager.get("ctx_manage_packages", "📦 Spravovať balíčky (Pip Manager)"))
@@ -384,10 +423,13 @@ class MasterManager(QWidget):
             menu.exec(self.table_venvs.viewport().mapToGlobal(position))
 
     def open_pip_manager_doubleclick(self, index):
-        if index.isValid(): self.on_venv_selected(); self.open_pip_manager()
+        if index.isValid():
+            self.on_venv_selected()
+            self.open_pip_manager()
 
     def setup_multi_run_tab(self):
-        self.populate_multi_groups_list(); self.populate_projects_tree()
+        self.populate_multi_groups_list()
+        self.populate_projects_tree()
         header = self.table_group_members.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -476,8 +518,10 @@ class MasterManager(QWidget):
         member_paths = {m['venv_path'] for m in members}
         it = QTreeWidgetItemIterator(self.tree_all_projects)
         while it.value():
-            item = it.value(); d = item.data(0, Qt.ItemDataRole.UserRole)
-            if d: item.setCheckState(0, Qt.CheckState.Checked if d['venv_path'] in member_paths else Qt.CheckState.Unchecked)
+            item = it.value()
+            d = item.data(0, Qt.ItemDataRole.UserRole)
+            if d:
+                item.setCheckState(0, Qt.CheckState.Checked if d['venv_path'] in member_paths else Qt.CheckState.Unchecked)
             it += 1
         self.tree_all_projects.blockSignals(False)
 
@@ -508,7 +552,8 @@ class MasterManager(QWidget):
                 self.table_group_members.setItem(row, 2, s)
         else:
             row = self.find_row_by_venv_path(venv_data['venv_path'])
-            if row is not None: self.table_group_members.removeRow(row)
+            if row is not None:
+                self.table_group_members.removeRow(row)
 
     def find_row_by_venv_path(self, venv_path):
         for row in range(self.table_group_members.rowCount()):
@@ -557,7 +602,8 @@ class MasterManager(QWidget):
     def uncheck_all_projects(self):
         it = QTreeWidgetItemIterator(self.tree_all_projects)
         while it.value():
-            if it.value().data(0, Qt.ItemDataRole.UserRole): it.value().setCheckState(0, Qt.CheckState.Unchecked)
+            if it.value().data(0, Qt.ItemDataRole.UserRole):
+                it.value().setCheckState(0, Qt.CheckState.Unchecked)
             it += 1
 
     def remove_selected_group(self):
@@ -569,7 +615,9 @@ class MasterManager(QWidget):
         if QMessageBox.question(self, title, msg) == QMessageBox.StandardButton.Yes:
             if group_name in self.core.multi_groups:
                 del self.core.multi_groups[group_name]
-                self.core.save_config(); self.populate_multi_groups_list(); self.config_changed.emit()
+                self.core.save_config()
+                self.populate_multi_groups_list()
+                self.config_changed.emit()
 
     def setup_table_style(self):
         header = self.table_venvs.horizontalHeader()
@@ -614,19 +662,41 @@ class MasterManager(QWidget):
             self.edit_manager_script.blockSignals(True)
             self.edit_manager_script.setText(self.core.last_script)
             self.edit_manager_script.blockSignals(False)
+
+        # Prenosné cesty k IDE
+        if hasattr(self, 'edit_portable_vscode'):
+            self.edit_portable_vscode.setPlaceholderText(
+                LanguageManager.get("ph_portable_ide", "Predvolene: Systémová inštalácia")
+            )
+        if hasattr(self, 'edit_portable_cursor'):
+            self.edit_portable_cursor.setPlaceholderText(
+                LanguageManager.get("ph_portable_ide", "Predvolene: Systémová inštalácia")
+            )
             
         self.refresh_projects_combo()
         self.populate_themes_combo()
         self.populate_package_manager_combo()
         self.populate_vscode_users_combo()
 
+        # Naplnenie IDE ComboBoxu
+        if hasattr(self, 'combo_active_ide'):
+            IDESettingsHandler.populate_combo(self.combo_active_ide, self.core)
+
     def select_projects_root(self):
         path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_projects_root", "Vyberte priečinok projektov"))
-        if path: self.core.projects_root = path; self.core.save_config(); self.refresh_ui_from_config(); self.populate_projects_tree()
+        if path:
+            self.core.projects_root = path
+            self.core.save_config()
+            self.refresh_ui_from_config()
+            self.populate_projects_tree()
 
     def select_hub_root(self):
         path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_hub_root", "Vyberte priečinok Venv Hub"))
-        if path: self.core.venv_hub_root = path; self.core.save_config(); self.refresh_ui_from_config(); self.populate_projects_tree()
+        if path:
+            self.core.venv_hub_root = path
+            self.core.save_config()
+            self.refresh_ui_from_config()
+            self.populate_projects_tree()
 
     def select_local_pkg_root(self):
         path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_local_pkg_root", "Vyberte priečinok s lokálnymi balíčkami"))
@@ -643,11 +713,17 @@ class MasterManager(QWidget):
             self.refresh_ui_from_config()
 
     def refresh_projects_combo(self):
-        self.combo_projs.blockSignals(True); self.combo_projs.clear()
-        projs = self.core.get_projects(); self.combo_projs.addItems(projs)
-        if self.core.active_project in projs: self.combo_projs.setCurrentText(self.core.active_project)
-        elif projs: self.core.active_project = projs[0]; self.combo_projs.setCurrentText(projs[0])
-        self.combo_projs.blockSignals(False); self.on_project_changed(self.combo_projs.currentText())
+        self.combo_projs.blockSignals(True)
+        self.combo_projs.clear()
+        projs = self.core.get_projects()
+        self.combo_projs.addItems(projs)
+        if self.core.active_project in projs:
+            self.combo_projs.setCurrentText(self.core.active_project)
+        elif projs:
+            self.core.active_project = projs[0]
+            self.combo_projs.setCurrentText(projs[0])
+        self.combo_projs.blockSignals(False)
+        self.on_project_changed(self.combo_projs.currentText())
         self.populate_projects_tree()
 
     def on_project_changed(self, text):
@@ -663,50 +739,60 @@ class MasterManager(QWidget):
 
     def on_venv_selected(self):
         sel = self.table_venvs.selectionModel().selectedRows()
-        if not sel: self.selected_venv_path = None; self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---")); return
-        row = sel[0].row(); name = self.table_venvs.item(row, 0).text(); ver = self.table_venvs.item(row, 1).text()
+        if not sel:
+            self.selected_venv_path = None
+            self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---"))
+            return
+        row = sel[0].row()
+        name = self.table_venvs.item(row, 0).text()
+        ver = self.table_venvs.item(row, 1).text()
         self.selected_venv_path = Paths.get_venv_path(self.core.venv_hub_root, f"{self.core.active_project}_{name}")
         self.lbl_selected_venv.setText(LanguageManager.get("fmt_selected_venv", "Zvolený: {0} (Python {1})").format(name, ver))
 
     def refresh_table(self):
-        self.selected_venv_path = None; self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---"))
-        venvs = self.core.get_venvs_for_active_project(); self.table_venvs.setRowCount(0)
+        self.selected_venv_path = None
+        self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---"))
+        venvs = self.core.get_venvs_for_active_project()
+        self.table_venvs.setRowCount(0)
         
         default_venv_path = self.core.get_project_default_venv()
         
         for v in venvs:
-            row = self.table_venvs.rowCount(); self.table_venvs.insertRow(row)
+            row = self.table_venvs.rowCount()
+            self.table_venvs.insertRow(row)
             self.table_venvs.setItem(row, 0, QTableWidgetItem(v['name']))
-            ver_item = QTableWidgetItem(v['version']); ver_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter); self.table_venvs.setItem(row, 1, ver_item)
+            ver_item = QTableWidgetItem(v['version'])
+            ver_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table_venvs.setItem(row, 1, ver_item)
             
             is_def = (v['path'] == default_venv_path)
-            stat_item = QTableWidgetItem("★" if is_def else ""); stat_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter); self.table_venvs.setItem(row, 2, stat_item)
+            stat_item = QTableWidgetItem("★" if is_def else "")
+            stat_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table_venvs.setItem(row, 2, stat_item)
             
-            act = QWidget(); uic.loadUi(Paths.get_ui_file_path("venv_actions.ui"), act)
+            act = QWidget()
+            uic.loadUi(Paths.get_ui_file_path("venv_actions.ui"), act)
             act.rb_default.setChecked(is_def)
             act.rb_default.clicked.connect(lambda ch, p=v['path']: ActivateHandler.set_default(self.core, p, self))
             
+            # --- DYNAMICKÉ NASTAVENIE IDE TLAČIDLA CEZ JADRO ---
+            IDESettingsHandler.apply_ide_button_state(act.btn_vscode, self.core)
             act.btn_vscode.clicked.connect(lambda ch, p=v['path']: self.launch_vscode_for_venv(p))
             
-            # --- OPRAVA: POUŽIJEME LAMBDA, KTORÁ ZACHYTÍ BOOLEAN A SPUSTÍ OBA PRÍKAZY ---
             act.btn_run.clicked.connect(lambda ch, p=v['path']: [
                 ActivateHandler.set_default(self.core, p, self),
                 RowActionHandler.run_venv(self.core, p)
             ])
-            # ----------------------------------------------------------------------------
 
             act.btn_stop.clicked.connect(lambda ch, p=v['path']: RowActionHandler.stop_venv(p))
-
             act.btn_venv_update.clicked.connect(lambda ch, p=v['path']: PipManager.update_all_packages(p, self.log_output, self.core.package_manager))
             act.btn_delete.clicked.connect(lambda ch, p=v['path']: DeleteHandler.run(self.core, p, self))
             self.table_venvs.setCellWidget(row, 3, act)
 
     def launch_vscode_for_venv(self, venv_path):
-        """Vyvolá spustenie VS Code s vybraným Venv a profilom a nastaví ho ako predvolený."""
-        # 1. Nastaví vybraný Venv ako aktívny v aplikácii aj vo VS Code settings.json
+        """Vyvolá spustenie VS Code / Cursoru s vybraným Venv a profilom a nastaví ho ako predvolený."""
         ActivateHandler.set_default(self.core, venv_path, self)
         
-        # 2. Spustí VS Code
         project_path = Paths.get_project_path(self.core.projects_root, self.core.active_project)
         success, err_msg = VSCodeLauncher.launch(self.core, project_path, venv_path)
         
@@ -714,17 +800,24 @@ class MasterManager(QWidget):
             QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), err_msg)
 
     def populate_themes_combo(self):
-        self.combo_themes.blockSignals(True); self.combo_themes.clear()
+        self.combo_themes.blockSignals(True)
+        self.combo_themes.clear()
         self.combo_themes.addItem(LanguageManager.get("theme_default", "Default"), "default")
         skins = SkinManager.get_available_skins()
-        for f, d in skins.items(): self.combo_themes.addItem(d, f)
+        for f, d in skins.items():
+            self.combo_themes.addItem(d, f)
         idx = self.combo_themes.findData(self.core.active_theme)
-        self.combo_themes.setCurrentIndex(idx if idx != -1 else 0); self.combo_themes.blockSignals(False)
+        self.combo_themes.setCurrentIndex(idx if idx != -1 else 0)
+        self.combo_themes.blockSignals(False)
 
     def on_theme_changed(self, index):
         if index == -1: return
         theme = self.combo_themes.itemData(index)
-        if SkinManager.apply_skin(theme): self.core.active_theme = theme; self.core.save_config(); self.config_changed.emit(); self.theme_changed.emit()
+        if SkinManager.apply_skin(theme):
+            self.core.active_theme = theme
+            self.core.save_config()
+            self.config_changed.emit()
+            self.theme_changed.emit()
 
     def import_skin(self):
         new = SkinManager.import_new_skin(self)
@@ -751,7 +844,6 @@ class MasterManager(QWidget):
         selected_manager = self.combo_pkg_manager.itemData(index)
         
         if selected_manager == "uv":
-            # --- AKTUALIZÁCIA AKTÍVNEHO PYTHONU PRE UV PRED KONTROLOU ---
             active_venv = self.core.active_venv_path
             if active_venv:
                 parent_py = PythonDetector.resolve_parent_python(active_venv)
@@ -759,16 +851,12 @@ class MasterManager(QWidget):
             else:
                 PythonDetector.set_active_python_path(None)
                 
-            # Resetujeme cache pre zaručenie čerstvého overenia
             UVDetector.reset_cache()
             
             if not UVDetector.is_uv_installed():
                 title = LanguageManager.get("title_uv_missing", "UV nie je nainštalované")
-                
-                # Zistíme zobrazenie názvu aktívneho Pythonu pre lepšiu lokalizáciu chyby
                 active_py_name = os.path.basename(PythonDetector.get_active_python_path())
                 
-                # Zostavíme detailnú správu pre používateľa
                 msg = LanguageManager.get(
                     "msg_uv_missing_for_active", 
                     "Nástroj 'uv' nebol pre aktívny Python ({0}) nájdený.\n\n"
@@ -778,7 +866,6 @@ class MasterManager(QWidget):
                 
                 QMessageBox.warning(self, title, msg)
                 
-                # Vrátenie výberu v ComboBoxe späť na predvolený Pip
                 self.combo_pkg_manager.blockSignals(True)
                 self.combo_pkg_manager.setCurrentIndex(self.combo_pkg_manager.findData("pip"))
                 self.combo_pkg_manager.blockSignals(False)

@@ -1,5 +1,5 @@
 #----------------------------------------
-# Súbor: core/_path.py (FINÁLNA VERZIA PRE DUAL-THEME SYSTÉM + PYTHON INSTALLER + AUTOSTART)
+# Súbor: core/_path.py (FINÁLNA VERZIA PRE DUAL-THEME SYSTÉM + PYTHON INSTALLER + AUTOSTART + IDE)
 #----------------------------------------
 
 import os
@@ -32,7 +32,17 @@ class Paths:
     # --- KONŠTANTY PRE PYTHON INSTALLER A AUTOSTART ---
     ASSETS_DIR_NAME = "assets"
     PYTHON_VERSIONS_JSONL_NAME = "jso_python_ver.jsonl"
-    AUTOSTART_DIR_NAME = "autostart_multi" # <--- NOVÉ
+    AUTOSTART_DIR_NAME = "autostart_multi"
+
+    # --- KONŠTANTY PRE IDE EDITORY (VS CODE & CURSOR) ---
+    VSCODE_DIR_NAME = ".vscode"
+    CURSOR_DIR_NAME = ".cursor"
+    IDE_CONFIG_DIR_NAMES = [".vscode", ".cursor"]
+
+    SETTINGS_JSON_NAME = "settings.json"
+    TASKS_JSON_NAME = "tasks.json"
+    KEYBINDINGS_JSON_NAME = "keybindings.json"
+    VENVHUB_TRACKER_JSON_NAME = "venvhub_tracker.json"
 
     @staticmethod
     def get_base_path() -> str:
@@ -200,3 +210,19 @@ class Paths:
             temp_dir = os.path.join(exe_dir, "Downloads")
             os.makedirs(temp_dir, exist_ok=True)
             return temp_dir
+
+    # --- METÓDY PRE PROJEKTOVÉ IDE CIESTY (VS CODE & CURSOR) ---
+    @staticmethod
+    def get_project_ide_dir(project_path: str, ide_dir_name: str) -> str:
+        """Vráti cestu k priečinku editora v projekte (napr. /Projekt/.vscode alebo /Projekt/.cursor)."""
+        return os.path.join(project_path, ide_dir_name)
+
+    @staticmethod
+    def get_all_project_ide_dirs(project_path: str) -> list[str]:
+        """Vráti zoznam všetkých IDE priečinkov v projekte (.vscode a .cursor)."""
+        return [os.path.join(project_path, name) for name in Paths.IDE_CONFIG_DIR_NAMES]
+
+    @staticmethod
+    def get_project_ide_file_path(project_path: str, ide_dir_name: str, file_name: str) -> str:
+        """Vráti cestu ku konkrétnemu súboru (napr. /Projekt/.cursor/settings.json)."""
+        return os.path.join(project_path, ide_dir_name, file_name)

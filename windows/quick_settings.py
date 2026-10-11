@@ -50,6 +50,13 @@ class QuickSettingsWindow(QWidget):
 
     def retranslate_ui(self):
         LanguageManager.translate_ui(self)
+        if hasattr(self, 'combo_language'):
+            self.populate_language_combo()
+        if hasattr(self, 'combo_skins'):
+            self.populate_skins_combo()
+            self.load_saved_skin()
+        if hasattr(self, 'combo_vscode_user'):
+            self.populate_vscode_users_combo()
 
     def connect_signals(self):
         self.combo_project.currentTextChanged.connect(self.on_project_selected)
@@ -113,13 +120,17 @@ class QuickSettingsWindow(QWidget):
         self.combo_vscode_user.addItem(LanguageManager.get("vscode_user_none", "--- Žiadny ---"), "")
         
         root_path = getattr(self.core, 'vscode_users_root', '')
+        active_ide = getattr(self.core, 'active_ide', 'vscode')
+
         if root_path and os.path.exists(root_path):
-            profiles = VSCodeProfileManager.get_profiles(root_path)
-            for p in profiles:
-                display_text = f"{p['display_name']} ({p['id']})"
-                self.combo_vscode_user.addItem(display_text, p["id"])
+            profiles_dir = VSCodeProfileManager.get_ide_profiles_dir(root_path, active_ide)
+            if os.path.exists(profiles_dir):
+                profiles = VSCodeProfileManager.get_profiles(profiles_dir)
+                for p in profiles:
+                    display_text = f"{p['display_name']} ({p['id']})"
+                    self.combo_vscode_user.addItem(display_text, p["id"])
                 
-        active_user = getattr(self.core, 'active_vscode_user', '')
+        active_user = self.core.get_active_ide_user()
         idx = self.combo_vscode_user.findData(active_user)
         if idx != -1:
             self.combo_vscode_user.setCurrentIndex(idx)
@@ -133,12 +144,13 @@ class QuickSettingsWindow(QWidget):
         
         selected_user_id = self.combo_vscode_user.itemData(index)
         
-        if selected_user_id != getattr(self.core, 'active_vscode_user', None):
-            self.core.active_vscode_user = selected_user_id
+        if selected_user_id != self.core.get_active_ide_user():
+            self.core.set_active_ide_user(selected_user_id)
             self.core.save_config()
             self.status_changed.emit()
             self.vscode_user_changed.emit()
 
+    
     def populate_language_combo(self):
         self.combo_language.blockSignals(True)
         self.combo_language.clear()
@@ -243,7 +255,10 @@ class QuickSettingsWindow(QWidget):
         if not hasattr(self, 'combo_skins'): return
         self.combo_skins.blockSignals(True)
         self.combo_skins.clear()
-        self.combo_skins.addItem("Default", "default")
+        
+        default_theme_text = LanguageManager.get("theme_default", "Default")
+        self.combo_skins.addItem(default_theme_text, "default")
+        
         skins_dict = SkinManager.get_available_skins()
         for filename, display_name in skins_dict.items():
             self.combo_skins.addItem(display_name, filename)

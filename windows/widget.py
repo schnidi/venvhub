@@ -15,6 +15,8 @@ from core.logic.language_manager import LanguageManager
 from core._path import Paths
 from core.logic.button.widget.widget_dispatcher import WidgetDispatcher
 from core.logic.sluzby.windows_location import WindowLocation
+from core.logic.box.ide_settings import IDESettingsHandler
+
 
 class ProjectMiniBar(QWidget):
     def __init__(self, core):
@@ -32,19 +34,18 @@ class ProjectMiniBar(QWidget):
 
         self.old_pos = None
         self.manager_window = None
-        self.settings_window = QuickSettingsWindow(self.core, parent=self)  # <--- Tu sme pridali parent=self
+        self.settings_window = QuickSettingsWindow(self.core, parent=self)
         self.settings_offset = None
 
         self.settings_window.status_changed.connect(self.update_status)
         self.settings_window.language_changed.connect(self.on_language_changed)
         self.settings_window.vscode_user_changed.connect(self.on_qs_vscode_user_changed)
-        # POZNÁMKA: settings_window.skin_changed sa NEPRIPÁJA - tento signál sa
-        # nikdy nespustí, lebo combo_skins v quick_settings.ui neexistuje.
-        # Skutočná zmena témy prebieha v Manager okne (combo_themes) a jej
-        # theme_changed signál je pripojený na on_skin_changed v open_manager.py.
         
         # --- NOVÉ PREPOJENIE PRE VENV ---
         self.settings_window.venv_changed.connect(self.on_qs_venv_changed)
+
+        # --- PASÍVNY LISTENER PRE IDE (VS Code / Cursor) ---
+        IDESettingsHandler.connect_ide_changed(self.on_ide_state_changed)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_status)
@@ -54,7 +55,11 @@ class ProjectMiniBar(QWidget):
         self.rebuild_ui()
         WindowLocation.restore_position(self, "widget_minibar")
 
-    # --- NOVÁ FUNKCIA ---
+    def on_ide_state_changed(self, payload=None):
+        """Pasívny listener: Z jadra prišla správa o zmene IDE – aplikujeme stav na tlačidlo."""
+        if hasattr(self, 'bar_widget') and hasattr(self.bar_widget, 'btn_vscode'):
+            IDESettingsHandler.apply_ide_button_state(self.bar_widget.btn_vscode, self.core)
+
     def on_qs_venv_changed(self):
         """Vyvolá sa, keď používateľ zmení Venv v rýchlych nastaveniach. Zaktualizuje hlavného Správcu."""
         if hasattr(self, 'manager_window') and self.manager_window:
@@ -96,7 +101,10 @@ class ProjectMiniBar(QWidget):
         self.bar_widget.btn_pin.setChecked(was_pin_checked)
         self.update_ui_for_mode()
 
-        # 3b. Nastavíme PLNÝ (neorezaný) status text ešte PRED meraním šírky,
+        # 3b. Aplikujeme stav IDE tlačidla (ikona podľa QSS, tooltip, stav)
+        IDESettingsHandler.apply_ide_button_state(self.bar_widget.btn_vscode, self.core)
+
+        # 3c. Nastavíme PLNÝ (neorezaný) status text ešte PRED meraním šírky,
         #    aby sizeHint labelu vychádzal z reálneho obsahu (projekt/venv),
         #    nie z krátkeho placeholdera z apply_language().
         if self.core.app_mode != 'multi':
@@ -154,7 +162,7 @@ class ProjectMiniBar(QWidget):
         self.bar_widget.btn_play.clicked.connect(lambda: WidgetDispatcher.handle_play(self))
         self.bar_widget.btn_stop.clicked.connect(lambda: WidgetDispatcher.handle_stop(self))
         
-        # --- PREPOJENIE NOVÉHO TLAČIDLA VS CODE ---
+        # --- PREPOJENIE TLAČIDLA IDE ---
         self.bar_widget.btn_vscode.clicked.connect(lambda: WidgetDispatcher.handle_vscode(self))
         
         self.bar_widget.btn_open_mgr.clicked.connect(lambda: OpenManagerHandler.run(self))
@@ -169,6 +177,9 @@ class ProjectMiniBar(QWidget):
         """Vyvolá sa pri zatvorení MiniBaru (krížikom)."""
         WindowLocation.save_position(self, "widget_minibar")
         
+        # Odhlásenie z odberu IDE signálu
+        IDESettingsHandler.disconnect_ide_changed(self.on_ide_state_changed)
+
         if hasattr(self, 'settings_window') and self.settings_window:
             self.settings_window.close()
         
@@ -196,13 +207,13 @@ class ProjectMiniBar(QWidget):
             self.bar_widget.lbl_info.hide()
             self.bar_widget.combo_multi_group.show()
             self.bar_widget.btn_mgr.hide()
-            self.bar_widget.btn_vscode.hide() # V Multi režime skrývame VS Code
+            self.bar_widget.btn_vscode.hide()
             self.populate_multi_groups_combo()
-        else: # single
+        else:
             self.bar_widget.lbl_info.show()
             self.bar_widget.combo_multi_group.hide()
             self.bar_widget.btn_mgr.show()
-            self.bar_widget.btn_vscode.show() # Zobrazíme v Single režime
+            self.bar_widget.btn_vscode.show()
 
     def populate_multi_groups_combo(self):
         self.bar_widget.combo_multi_group.blockSignals(True)
@@ -229,10 +240,7 @@ class ProjectMiniBar(QWidget):
             self.update_status()
 
     def get_full_status_text(self):
-        """Vráti PLNÝ (neorezaný) text pre lbl_info - to isté, čo počíta
-        update_status(), len bez orezania na aktuálnu šírku labelu.
-        Používa sa aj v on_skin_changed(), aby sa šírka okna počítala
-        z reálneho obsahu, nie z krátkeho/orezaného textu."""
+        """Vráti PLNÝ (neorezaný) text pre lbl_info."""
         proj = self.core.active_project or LanguageManager.get("msg_select_project", "Vyberte projekt")
         v_path = self.core.active_venv_path
         v_name = "---"
@@ -249,7 +257,11 @@ class ProjectMiniBar(QWidget):
         if self.core.app_mode == 'multi':
             active_group_name = self.core.active_multi_group
             self.bar_widget.lbl_dot.setStyleSheet(f"color: #e74c3c;")
-            self.bar_widget.combo_multi_group.setToolTip(f"Aktívna skupina: {active_group_name}")
+            tip_msg = LanguageManager.get(
+                "tip_active_group",
+                "Aktívna skupina: {0}"
+            ).format(active_group_name)
+            self.bar_widget.combo_multi_group.setToolTip(tip_msg)
             return
 
         full_text = self.get_full_status_text()
@@ -283,7 +295,7 @@ class ProjectMiniBar(QWidget):
         # 2. Manuálne prepísanie vecí, ktoré sa menia dynamicky
         self.bar_widget.btn_toggle_mode.setText("")
         
-        # --- OPRAVA: Udržanie správnej ikony (šípka/koleso) po zmene jazyka ---
+        # --- Udržanie správnej ikony (šípka/koleso) po zmene jazyka ---
         if hasattr(self, 'settings_window') and self.settings_window and self.settings_window.isVisible():
             self.bar_widget.btn_mgr.setText("▼")
         else:
@@ -293,6 +305,9 @@ class ProjectMiniBar(QWidget):
         self.bar_widget.btn_pin.setToolTip(LanguageManager.get("btn_pin_tooltip", "Stále navrchu"))
         self.bar_widget.btn_toggle_mode.setToolTip(LanguageManager.get("btn_toggle_mode_tooltip", "Prepnúť režim Single/Multi"))
         self.bar_widget.lbl_info.setText(LanguageManager.get("lbl_info", "Načítavam..."))
+        
+        # 4. Aplikujeme preložený tooltip a stav pre tlačidlo IDE
+        IDESettingsHandler.apply_ide_button_state(self.bar_widget.btn_vscode, self.core)
         
         if self.core.app_mode == 'multi' and self.bar_widget.combo_multi_group.count() > 0:
             if not list(self.core.multi_groups.keys()):
@@ -334,7 +349,8 @@ class ProjectMiniBar(QWidget):
             self.settings_offset = self.settings_window.pos() - self.pos()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton: self.old_pos = event.globalPosition().toPoint()
+        if event.button() == Qt.MouseButton.LeftButton: 
+            self.old_pos = event.globalPosition().toPoint()
         
     def mouseMoveEvent(self, event):
         if self.old_pos:
@@ -354,12 +370,15 @@ class ProjectMiniBar(QWidget):
             self.populate_multi_groups_combo()
         self.update_status()
         
-        # --- ZMENA: Rýchlym nastaveniam vnútime aktualizáciu okamžite bez ohľadu na to, či ich je vidno ---
+        # Aktualizácia stavu IDE tlačidla
+        IDESettingsHandler.apply_ide_button_state(self.bar_widget.btn_vscode, self.core)
+        
+        # Rýchlym nastaveniam vnútime aktualizáciu okamžite bez ohľadu na to, či ich je vidno
         if hasattr(self, 'settings_window') and self.settings_window:
-            self.settings_window.populate_vscode_users_combo() # Natvrdo aktualizujeme profil
+            self.settings_window.populate_vscode_users_combo()
             
             if self.settings_window.isVisible():
-                self.settings_window.populate_panel() # Ak sú otvorené, aktualizujeme celé UI
+                self.settings_window.populate_panel()
 
             # Vynútime si synchronizáciu s Venv-om
             if self.core.active_venv_path:

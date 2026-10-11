@@ -19,6 +19,10 @@ setup_qt_environment()
 from core.logic.system_listener import SystemListener
 SystemListener.start_listening()
 
+# --- ŠTART 2s SCANNERA PRE VS CODE & CURSOR ---
+from core.logic.ide_detector import IDEDetector
+IDEDetector.start_listening()
+
 from PyQt6.QtWidgets import QApplication
 
 from windows.widget import ProjectMiniBar

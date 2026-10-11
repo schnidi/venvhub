@@ -84,6 +84,22 @@ class VSCodeProfileManager:
         except Exception: pass
 
     @staticmethod
+    def get_ide_profiles_dir(root_path: str, ide_type: str = "vscode") -> str:
+        """
+        Vráti cestu k priečinku profilov pre konkrétne IDE (napr. root/vscode alebo root/cursor).
+        Ak priečinok ešte neexistuje, automaticky ho vytvorí.
+        """
+        if not root_path:
+            return ""
+        subfolder = "cursor" if ide_type == "cursor" else "vscode"
+        target_dir = os.path.join(root_path, subfolder)
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+        except OSError:
+            pass
+        return target_dir
+
+    @staticmethod
     def delete_profile(root_path: str, user_id: str) -> dict:
         profile_dir = os.path.join(root_path, user_id)
         return CopyDelService.safe_delete_with_progress(profile_dir)

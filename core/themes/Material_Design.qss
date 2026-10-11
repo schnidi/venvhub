@@ -348,3 +348,13 @@ QPushButton#btn_update_github:hover {
     border-radius: 4px;
 }
 
+/* Ikona pre VS Code podľa témy */
+QPushButton#btn_vscode[ide_type="vscode"] {
+    qproperty-icon: url({{CORE_THEMES_DIR}}/icon/vscode/vscode5.svg);
+}
+
+/* Ikona pre Cursor podľa témy */
+QPushButton#btn_vscode[ide_type="cursor"] {
+    qproperty-icon: url({{CORE_THEMES_DIR}}/icon/cursor/cursor_icon.svg);
+}
+

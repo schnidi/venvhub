@@ -311,169 +311,293 @@
          <property name="title">
           <string>Základné cesty</string>
          </property>
-         <layout class="QVBoxLayout" name="paths_layout">
-          <item>
-           <layout class="QHBoxLayout" name="row_proj">
-            <item>
-             <widget class="QLabel" name="lbl_p">
-              <property name="minimumSize">
-               <size>
-                <width>150</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Koreň projektov:</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="edit_proj">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="btn_set_proj">
-              <property name="text">
-               <string>📁</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
+         <layout class="QGridLayout" name="paths_grid_layout">
+          <property name="horizontalSpacing">
+           <number>6</number>
+          </property>
+          <property name="verticalSpacing">
+           <number>6</number>
+          </property>
+
+          <!-- RIADOK 0: KOREŇ PROJEKTOV -->
+          <item row="0" column="0">
+           <widget class="QLabel" name="lbl_p">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Koreň projektov:</string>
+            </property>
+           </widget>
           </item>
-          <item>
-           <layout class="QHBoxLayout" name="row_hub">
-            <item>
-             <widget class="QLabel" name="lbl_h">
-              <property name="minimumSize">
-               <size>
-                <width>150</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Venv Hub:</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="edit_hub">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="btn_set_hub">
-              <property name="text">
-               <string>📁</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="edit_proj">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="btn_set_proj">
+            <property name="text">
+             <string>📁</string>
+            </property>
+           </widget>
+          </item>
+
+          <!-- RIADOK 1: VENV HUB -->
+          <item row="1" column="0">
+           <widget class="QLabel" name="lbl_h">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Venv Hub:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="edit_hub">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QPushButton" name="btn_set_hub">
+            <property name="text">
+             <string>📁</string>
+            </property>
+           </widget>
           </item>
           
-          <!-- KOREŇ LOKÁLNYCH BALÍČKOV -->
-          <item>
-           <layout class="QHBoxLayout" name="row_local_pkg">
-            <item>
-             <widget class="QLabel" name="lbl_local_pkg">
-              <property name="minimumSize">
-               <size>
-                <width>150</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Lokálne balíčky:</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="edit_local_pkg">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-             <item>
-              <widget class="QPushButton" name="btn_set_local_pkg">
-               <property name="text">
-                <string>📁</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
+          <!-- RIADOK 2: LOKÁLNE BALÍČKY -->
+          <item row="2" column="0">
+           <widget class="QLabel" name="lbl_local_pkg">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Lokálne balíčky:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="edit_local_pkg">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QPushButton" name="btn_set_local_pkg">
+            <property name="text">
+             <string>📁</string>
+            </property>
+           </widget>
+          </item>
 
-           <!-- NOVÉ: KOREŇ PIP-E BALÍČKOV -->
-           <item>
-            <layout class="QHBoxLayout" name="row_pip_e_pkg">
-             <item>
-              <widget class="QLabel" name="lbl_pip_e_pkg">
-               <property name="minimumSize">
-                <size>
-                 <width>150</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Lokálne balíčky (pip -e):</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="edit_pip_e_pkg">
-               <property name="readOnly">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btn_set_pip_e_pkg">
-               <property name="text">
-                <string>📁</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <!-- KONIEC NOVÉHO BLOKU -->
+          <!-- RIADOK 3: PIP-E BALÍČKY -->
+          <item row="3" column="0">
+           <widget class="QLabel" name="lbl_pip_e_pkg">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Lokálne balíčky (pip -e):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="edit_pip_e_pkg">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QPushButton" name="btn_set_pip_e_pkg">
+            <property name="text">
+             <string>📁</string>
+            </property>
+           </widget>
+          </item>
 
-           <!-- VS CODE POUŽÍVATELIA -->
-           <item>
-            <layout class="QHBoxLayout" name="row_vscode_users">
-             <item>
-              <widget class="QLabel" name="lbl_vscode_user_select">
-               <property name="minimumSize">
-                <size>
-                 <width>150</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>VS Code Profil:</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QComboBox" name="combo_vscode_user"/>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btn_manage_vscode_users">
-               <property name="text">
-                <string>Správa kont</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
+          <!-- RIADOK 4: VS CODE PROFIL -->
+          <item row="4" column="0">
+           <widget class="QLabel" name="lbl_vscode_user_select">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>VS Code Profil:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="combo_vscode_user"/>
+          </item>
+          <item row="4" column="2">
+           <widget class="QPushButton" name="btn_manage_vscode_users">
+            <property name="text">
+             <string>Správa kont</string>
+            </property>
+           </widget>
+          </item>
 
-          </layout>
+          <!-- RIADOK 5: PREDVOLENÝ EDITOR (IDE) -->
+          <item row="5" column="0">
+           <widget class="QLabel" name="lbl_active_ide">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Predvolený editor (IDE):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="combo_active_ide"/>
+          </item>
+          <item row="5" column="2">
+           <!-- Prázdne miesto v mriežke -->
+          </item>
+
+          <!-- RIADOK 6: PRENOSNÝ VS CODE -->
+          <item row="6" column="0">
+           <widget class="QLabel" name="lbl_portable_vscode">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Prenosný VS Code:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QLineEdit" name="edit_portable_vscode">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="placeholderText">
+             <string>Predvolene: Systémová inštalácia</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="2">
+           <widget class="QPushButton" name="btn_set_portable_vscode">
+            <property name="text">
+             <string>📁</string>
+            </property>
+           </widget>
+          </item>
+
+          <!-- RIADOK 7: PRENOSNÝ CURSOR -->
+          <item row="7" column="0">
+           <widget class="QLabel" name="lbl_portable_cursor">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Prenosný Cursor:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QLineEdit" name="edit_portable_cursor">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="placeholderText">
+             <string>Predvolene: Systémová inštalácia</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QPushButton" name="btn_set_portable_cursor">
+            <property name="text">
+             <string>📁</string>
+            </property>
+           </widget>
+          </item>
+
+         </layout>
         </widget>
        </item>
+
+       <!-- SKUPINA: VZHĽAD APLIKÁCIE -->
        <item>
         <widget class="QGroupBox" name="group_themes">
          <property name="title">
@@ -482,6 +606,18 @@
          <layout class="QHBoxLayout" name="themes_h_layout">
           <item>
            <widget class="QLabel" name="lbl_active_theme">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <property name="text">
              <string>Aktívna téma:</string>
             </property>
@@ -513,6 +649,8 @@
          </layout>
         </widget>
        </item>
+
+       <!-- SKUPINA: SPRÁVCA BALÍČKOV -->
        <item>
         <widget class="QGroupBox" name="group_package_manager">
          <property name="title">
@@ -521,6 +659,18 @@
          <layout class="QHBoxLayout" name="pkg_mgr_h_layout">
           <item>
            <widget class="QLabel" name="lbl_pkg_manager">
+            <property name="minimumSize">
+             <size>
+              <width>185</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>185</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <property name="text">
              <string>Predvolený inštalátor:</string>
             </property>
