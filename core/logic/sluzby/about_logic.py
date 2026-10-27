@@ -5,7 +5,7 @@
 import os
 import json
 from core._path import Paths
-from core.logic.language_manager import LanguageManager
+from core.core_bridge import CoreBridge
 
 
 class AboutLogic:
@@ -57,7 +57,7 @@ class AboutLogic:
     def get_about_html(cls) -> str:
         """Načíta súbor about.json, dosadí reálnu verziu za {version} a vráti HTML podľa jazyka."""
         json_path = os.path.join(Paths.get_base_path(), Paths.ASSETS_DIR_NAME, "about.json")
-        html_content = LanguageManager.get("about_fallback_html", "<p>O programe</p>")
+        html_content = CoreBridge.translate("about_fallback_html", "<p>O programe</p>")
         app_version = cls.get_app_version()
         
         if os.path.exists(json_path):
@@ -70,7 +70,7 @@ class AboutLogic:
                         cls._cached_version = data["version"]
                         app_version = cls._cached_version
                         
-                    current_lang = LanguageManager._current_lang_code
+                    current_lang = CoreBridge.get_current_language()
                     lang_key = f"about_html_{current_lang}"
                     
                     if lang_key in data:
@@ -82,7 +82,7 @@ class AboutLogic:
                     elif "about_html" in data:
                         html_content = data["about_html"]
             except Exception as e:
-                html_content = LanguageManager.get("about_err_load", "<p>Chyba: {0}</p>").format(e)
+                html_content = CoreBridge.translate("about_err_load", "<p>Chyba: {0}</p>").format(e)
                 
         # Dynamické dosadenie čísla verzie namiesto zástupného znaku {version}
         if "{version}" in html_content:

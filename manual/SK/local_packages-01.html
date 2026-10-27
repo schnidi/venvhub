@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lokálne balíčky - VenvHub Pro Manuál</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ================= ĽAVÉ MENU ================= -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>VenvHub Pro</h2>
+            <span>Užívateľský Manuál v2.5.14</span>
+        </div>
+        <div class="nav-links">
+            <a href="features.html">✨ Prehľad Vlastností</a>
+            <a href="index.html">📥 1. Inštalácia a prvé spustenie</a>
+            <a href="minibar.html">🚀 2. Mini-Bar a Quick Settings</a>
+            <a href="manager.html">📁 3. Správca Prostredí</a>
+            <a href="pip.html">📦 4. Pip Manažér balíčkov</a>
+            <a href="multirun.html">🔄 5. Hromadné spúšťanie</a>
+            <a href="builder.html">🛠 6. Tvorba .EXE (PyInstaller)</a>
+            <a href="settings.html">⚙️ 7. Nastavenia a Vzhľad</a>
+            <a href="local_python.html">🐍 8. Local Python (Runtime)</a>
+            <a href="autostart.html">🔄 9. Kontajner a Autostart</a>
+
+            <!-- AKTÍVNA HLAVNÁ KAPITOLA -->
+            <a href="local_packages.html" class="active">🔗 10. Lokálne balíčky (Linker)</a>
+
+            <!-- PODKAPITOLY PRE LOKÁLNE BALÍČKY -->
+            <div class="sub-menu">
+                <a href="#princip">10.1 Princíp dynamického prepájania</a>
+                <a href="#struktura">10.2 Štruktúra (local_meta.json)</a>
+                <a href="#nastavenie">10.3 Nastavenie koreňovej cesty</a>
+                <a href="#pouzitie">10.4 Prelinkovanie do Venvu</a>
+                <a href="#vscode">10.5 Integrácia s VS Code</a>
+                <a href="#pyinstaller">10.6 Pribalenie do .EXE</a>
+                <a href="#samooprava">10.7 Samooprava na USB (Portable)</a>
+                <a href="#sietove-disky">10.8 Sieťové disky a NAS</a>
+            </div>
+
+            <a href="pip_editable.html">✏️ 11. Editovateľné balíčky (pip -e)</a>
+            <a href="vscode_user.html">💻 12. VS Code Profily</a>
+            <a href="vscode_integration.html">🔌 13. VS Code Integrácia</a>
+            <a href="samoreplikacia_venvhub.html">14. Architektúra a Kompilácia</a>
+        </div>
+    </div>
+
+    <!-- ================= OBSAH ================= -->
+    <div class="content">
+
+        <!-- PODKAPITOLA 10.1 -->
+        <div id="princip" class="section-box">
+            <h1>10. Lokálne balíčky (Shared Libraries)</h1>
+            
+            <h2>10.1 Princíp fungovania (Bez UAC)</h2>
+            <p>Funkcia <strong>Lokálne balíčky</strong> rieši častý problém vývojárov: ako efektívne zdieľať vlastný kód (knižnice, moduly) medzi viacerými projektmi bez nutnosti ich neustáleho kopírovania alebo inštalovania.</p>
+            
+            <p>VenvHub Pro na prepojenie nevyžaduje <strong>žiadne administrátorské práva (UAC)</strong> a nevytvára fyzické kópie ani zástupcov (Junctions) na disku. Namiesto toho využíva mimoriadne čistú, rýchlu a bezpečnú architektúru <strong>Python Import Hooks (sys.meta_path)</strong>. Systém automaticky vyrieši:</p>
+            <ul>
+                <li>Vytvorenie mapovacieho súboru <code>venvhub.json</code> v zložke <code>site-packages</code> cieľového Venvu.</li>
+                <li>Vloženie dynamického spúšťača (<code>.pth</code> a <code>.py</code> súbor), ktorý pri štarte Pythonu zachytí vaše importy a nasmeruje ich priamo k vašim kódom.</li>
+                <li>Automatickú tichú inštaláciu potrebných externých (PIP/UV) závislostí pre daný balíček.</li>
+                <li>Kompletné injektovanie absolútnych ciest a úloh do VS Code (IntelliSense).</li>
+            </ul>
+        </div>
+
+        <!-- PODKAPITOLA 10.2 -->
+        <div id="struktura" class="section-box">
+            <h2>10.2 Štruktúra balíčka (local_meta.json)</h2>
+            <p>Aby VenvHub Pro vedel s vaším balíčkom pracovať, musí každý priečinok v archíve obsahovať konfiguračný súbor <code>local_meta.json</code>. Tento súbor definuje meno, verziu a to, čo balíček vyžaduje.</p>
+
+            <h3>Príklad zápisu metadát:</h3>
+            <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto;">
+{
+    "name": "MojaDatabaza",
+    "version": "1.2.0",
+    "short_description": "Zabezpečuje pripojenie na MongoDB",
+    "requires_local": ["MojLogger"],
+    "requires_pip": ["colorama", "pymongo"],
+    "vscode_integration": {
+        "tasks": [
+            {
+                "label": "Zmazať Cache databázy",
+                "type": "shell",
+                "command": "python -c \"import db; db.clear()\""
+            }
+        ],
+        "keybindings": [
+            {
+                "key": "ctrl+shift+d",
+                "command": "workbench.action.tasks.runTask",
+                "args": "Zmazať Cache databázy"
+            }
+        ]
+    }
+}</pre>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <tr style="background-color: #f1f1f1; text-align: left;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">Kľúč</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Význam</th>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>short_description</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Krátky popis, ktorý sa zobrazí v tabuľke priamo v aplikácii VenvHub Pro.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>requires_local</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam mien iných priečinkov v tom istom archíve, ktoré tento balíček potrebuje.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>requires_pip</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam balíčkov z PyPI, ktoré sa majú automaticky doinštalovať.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>vscode_integration</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Umožňuje definovať vlastné príkazy (Tasks) a klávesové skratky, ktoré sa automaticky pridajú do cieľového projektu.</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- PODKAPITOLA 10.3 -->
+        <div id="nastavenie" class="section-box">
+            <h2>10.3 Nastavenie koreňovej cesty</h2>
+            <p>Pred prvým použitím musíte aplikácii povedať, kde sa nachádza váš archív lokálnych kódov:</p>
+            <ol>
+                <li>Otvorte <strong>Manager (🖥️)</strong> -> záložka <strong>Nastavenia</strong>.</li>
+                <li>V sekcii <strong>Základné cesty</strong> nájdite položku <strong>Lokálne balíčky</strong>.</li>
+                <li>Kliknite na ikonu priečinka 📁 a vyberte zložku, v ktorej máte svoje moduly (každý modul vo vlastnej podzložke).</li>
+            </ol>
+            <div class="tip">
+                <strong>Tip:</strong> Ak používate Portable verziu na USB kľúči, cesta sa automaticky prispôsobí aktuálnemu písmenu disku.
+            </div>
+        </div>
+
+        <!-- PODKAPITOLA 10.4 -->
+        <div id="pouzitie" class="section-box">
+            <h2>10.4 Prelinkovanie do Venvu</h2>
+            <p>Samotné pridanie balíčka do konkrétneho prostredia prebieha nasledovne:</p>
+            <ol>
+                <li>V tabuľke prostredí kliknite <strong>pravým tlačidlom</strong> na vybraný Venv.</li>
+                <li>Zvoľte možnosť <strong>🔗 Lokálne balíčky</strong>.</li>
+                <li>V otvorenom okne zaškrtnite balíčky, ktoré chcete v projekte používať.</li>
+                <li>Kliknite na <strong>💾 Uložiť zmeny (Prelinkovať)</strong>.</li>
+            </ol>
+
+            <div class="alert">
+                <strong>Automatizácia závislostí:</strong> Ak zaškrtnete "Balíček A", ktorý vyžaduje "Balíček B", systém automaticky prečíta jeho `local_meta.json`, zapíše obe cesty do `venvhub.json` vo Venve a ticho doinštaluje všetky potrebné PIP balíčky.
+            </div>
+        </div>
+
+        <!-- PODKAPITOLA 10.5 (AKTUALIZOVANÁ O HYBRIDNÝ BRUTAL CHECK A TRACKER) -->
+        <div id="vscode" class="section-box">
+            <h2>10.5 Integrácia s VS Code</h2>
+            <p>Jednou z hlavných výhod VenvHub Pro je koordinovaná synchronizácia s vývojovým prostredím VS Code. Keď urobíte zmenu v nastavení lokálnych balíčkov alebo prepnete aktívne virtuálne prostredie, systém vykoná nasledujúce operácie:</p>
+            <ul>
+                <li>VenvHub Pro prečíta súbor <code>venvhub.json</code> v danom prostredí a extrahuje z neho absolútne cesty pripojených lokálnych knižníc.</li>
+                <li>Tieto cesty odošle do konfiguračného poľa <code>python.analysis.extraPaths</code> v súbore <code>settings.json</code> vášho VS Code projektu. Pylance a IntelliSense vďaka tomu okamžite rozpoznajú vaše importy a kód nebude vykazovať falošné chybové hlásenia.</li>
+                <li>Do projektu sa podľa konfigurácie v metadátach pripoja vlastné úlohy (<code>tasks.json</code>) a klávesové skratky (<code>keybindings.json</code>).</li>
+            </ul>
+
+            <div class="tip" style="border-left-color: #007acc; background-color: #f0f7ff; margin-top: 20px; padding: 15px; border-radius: 5px;">
+                <strong style="color: #007acc;">🛡️ Hybridný mechanizmus (Brutal Check) a súbor venvhub_tracker.json:</strong>
+                <p style="margin-top: 10px;">Aby VenvHub Pro pri odstraňovaní balíčkov omylom nezasiahol do úloh a skratiek, ktoré ste si vo VS Code vytvorili vy sami ručne, využíva kombinovaný overovací mechanizmus:</p>
+                <ol style="margin-top: 10px; margin-bottom: 10px; padding-left: 20px;">
+                    <li style="margin-bottom: 8px;"><strong>Záznam o zápise (Účtenka):</strong> Pri každej integrácii úloh alebo skratiek si aplikácia zapíše presný zoznam vykonaných zmien do pomocného súboru <code>.vscode/venvhub_tracker.json</code>.</li>
+                    <li style="margin-bottom: 8px;"><strong>Prioritné čítanie z disku:</strong> Pri odškrtnutí (deaktivácii) balíčka sa systém pokúsi prečítať zoznam úloh na vymazanie priamo z jeho <code>local_meta.json</code> na disku a korektne ich odstráni zo súborov VS Code.</li>
+                    <li style="margin-bottom: 8px;"><strong>Záchranná brzda (Smazanie cez Prieskumník):</strong> Ak zistíte, že ste priečinok s balíčkom predtým zmazali ručne cez Windows Prieskumník (čiže jeho <code>local_meta.json</code> už neexistuje), VenvHub Pro automaticky použije dáta zo súboru <code>venvhub_tracker.json</code>, vyhľadá osirelé záznamy a bezpečne ich z konfigurácie VS Code vymaže.</li>
+                    <li style="margin-bottom: 8px;"><strong>Zosúladenie pri prepínaní Venvov:</strong> Ak v rámci jedného projektu prepnete aktívne prostredie (napr. z Venvu A s lokálnymi balíčkami na Venv B bez balíčkov), synchronizátor na pozadí automaticky odstráni z editora úlohy patriace starému prostrediu a pripraví čisté rozhranie pre nové prostredie podľa jeho konfigurácie.</li>
+                    <li style="margin-bottom: 0;"><strong>Automatické upratovanie prázdnych konfigurácií:</strong> Ak po odinštalovaní balíčka alebo prepnutí Venvu nezostanú vo VS Code žiadne ďalšie aktívne úlohy či skratky, VenvHub Pro fyzicky odstráni súbory <code>tasks.json</code>, <code>keybindings.json</code> aj samotný <code>venvhub_tracker.json</code>, čím zabraňuje hromadeniu prázdneho balastu v priečinku projektu.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- PODKAPITOLA 10.6 -->
+        <div id="pyinstaller" class="section-box">
+            <h2>10.6 Pribalenie do PyInstallera (.EXE)</h2>
+            <p>Vzhľadom na novú bez-UAC architektúru (Import Hooks) nie sú lokálne balíčky fyzicky prítomné v zložke prostredia. Klasický PyInstaller by ich pri statickej analýze kódu automaticky nenašiel.</p>
+            
+            <div class="tip">
+                <strong>VenvHub Auto-Injector (Plná automatizácia):</strong> 
+                Pri tvorbe finálneho <code>.exe</code> programu nemusíte v PyInstaller Builderi robiť ohľadom lokálnych balíčkov <strong>vôbec nič navyše!</strong> 
+                <br><br>
+                VenvHub Pro Builder obsahuje inteligentný predprocesor. Pred spustením PyInstallera automaticky prečíta súbor <code>venvhub.json</code> vo vašom prostredí a sám na pozadí vygeneruje:
+                <ul style="margin-top: 10px; margin-bottom: 0;">
+                    <li>Parameter <code>--paths</code>, vďaka ktorému PyInstaller okamžite nájde všetok váš Python kód z lokálnych balíčkov (bez nutnosti vypisovať "Skryté importy").</li>
+                    <li>Parameter <code>--add-data</code> pre každý jeden prepojený balíček. Aplikácia automaticky pribalí všetky vaše obrázky, .json konfigurácie a UI šablóny, ktoré sa nachádzajú vo vašich moduloch, priamo do výsledného <code>.exe</code>.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- PODKAPITOLA 10.7 -->
+        <div id="samooprava" class="section-box">
+            <h2>10.7 Samooprava ciest na USB kľúči (Portable režim)</h2>
+            <p>Nová architektúra robí prenášanie aplikácie a projektov na USB kľúči extrémne spoľahlivým a používateľsky príjemným.</p>
+            
+            <div class="tip">
+                <strong>Blesková tichá samooprava:</strong> Vždy, keď aplikáciu spustíte na novom počítači:
+                <ol>
+                    <li>VenvHub Pro deteguje, že sa zmenilo písmeno disku (napr. z <code>E:\</code> na <code>F:\</code>).</li>
+                    <li>Otvorí súbor <code>venvhub.json</code> v zložke vášho prostredia.</li>
+                    <li>Okamžite a <strong>úplne potichu</strong> v ňom prepíše staré písmená za nové.</li>
+                </ol>
+                <p style="margin-bottom: 0;"><em>Oproti staršej verzii (ktorá používala Windows Junctions) už na opravu <strong>nikdy nevyskočí UAC okno</strong> a proces prebehne za zlomok sekundy.</em></p>
+            </div>
+        </div>
+
+
+        <!-- PODKAPITOLA 10.8 -->
+        <div id="sietove-disky" class="section-box">
+            <h2>10.8 Sieťové disky (NAS a zdieľané zložky)</h2>
+            <div class="tip" style="border-left-color: #28a745; background-color: #eafaf1; color: #333;">
+                <strong>✅ Plná podpora pre umiestnenie kdekoľvek!</strong>
+                <p style="margin-top: 10px; margin-bottom: 0;">Obrovskou výhodou novej "Hook" architektúry (oproti zastaraným Pevným väzbám) je to, že váš "Koreň lokálnych balíčkov" <strong>môže byť umiestnený naozaj kdekoľvek</strong>. </p>
+                <br>
+                <p style="margin-bottom: 0;">Či už ide o váš lokálny disk, sieťový disk (NAS), alebo cloudovú zložku – všetko funguje bez problémov. Keďže VenvHub Pro zapisuje cesty iba ako bežný text do JSON súboru, operačnému systému (Windows/Linux) už nezáleží na tom, na akom type disku sa dáta fyzicky nachádzajú.</p>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

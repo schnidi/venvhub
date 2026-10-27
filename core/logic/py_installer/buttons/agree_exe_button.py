@@ -10,6 +10,9 @@ from core.logic.language_manager import LanguageManager
 from windows.build_log_dialog import BuildLogDialog
 from core._path import Paths
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 # --- BEZPEČNÝ IMPORT PRE UV.EXE ---
 try:
     from core.logic.box.uv_exe_install import UVExeInstaller
@@ -22,22 +25,10 @@ class AgreeExeButtonHandler:
 
     @staticmethod
     def show_custom_message(parent, title, text, icon, buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No):
-        """Pomocná metóda na vytvorenie bezrámového a štýlovateľného hlásenia."""
-        msg_box = QMessageBox(parent)
-        msg_box.setIcon(icon)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(text)
-        msg_box.setStandardButtons(buttons)
-        
-        # Nastavenie bezrámového štýlu
-        msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        msg_box.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        msg_box.setObjectName("CustomMessageBox")
-        
-        # Jemné doladenie vnútorných textov a tlačidiel priamo pre tento typ okna
-        msg_box.setStyleSheet("QLabel { color: #cccccc; padding: 10px; } QPushButton { min-width: 75px; }")
-        
-        return msg_box.exec()
+        """Pomocná metóda na vytvorenie bezrámového a štýlovateľného hlásenia cez CustomMessageBox."""
+        dialog = CustomMessageBox(parent, title, text, icon, buttons)
+        dialog.exec()
+        return dialog.result
 
     @staticmethod
     def run(window):
@@ -73,7 +64,6 @@ class AgreeExeButtonHandler:
                 QMessageBox.Icon.Question
             )
             if reply == QMessageBox.StandardButton.Yes:
-                # ZMENA: Posielame priamo venv_path na asynchrónnu inštaláciu
                 if not AgreeExeButtonHandler.install_pyinstaller(window, venv_path):
                     return 
             else:
@@ -92,7 +82,6 @@ class AgreeExeButtonHandler:
                 )
                 
                 if reply_uv == QMessageBox.StandardButton.Yes:
-                    # Spustenie asynchrónnej inštalácie namiesto sekania kurzora
                     success = AgreeExeButtonHandler.install_uv_to_venv_async(window, venv_path)
                     
                     if not success:
@@ -146,45 +135,34 @@ class AgreeExeButtonHandler:
         from windows.progress_dialog import ProgressDialog
         from core.logic.button.pip.pip_command_worker import PipCommandWorker
 
-        # Určenie ciest a manažéra (UV / PIP)
         manager_type = getattr(window.core, 'package_manager', 'pip')
         python_exe = Paths.get_venv_python_exe_path(venv_path)
         
-        # Získanie príkazu z Factory
         from core.logic.commands.command_factory import PackageManagerFactory
         dispatcher = PackageManagerFactory.get_dispatcher(manager_type, venv_path)
         cmd = dispatcher.get("install", package_name="pyinstaller")
 
-        # 1. Zostavenie nášho bezrámového ProgressDialogu
         progress = ProgressDialog(window)
         progress.setWindowTitle(LanguageManager.get("title_installing_pyinstaller", "Inštalácia PyInstaller"))
         progress.set_message(LanguageManager.get("msg_installing_pyinstaller", "Sťahujem a inštalujem balíček PyInstaller do prostredia..."))
-        progress.set_progress_mode(indeterminate=True) # Behajúci pásik (bežec)
+        progress.set_progress_mode(indeterminate=True)
 
-        # 2. Príprava vlákna a asynchrónneho workera
         thread = QThread()
         worker = PipCommandWorker(venv_path, cmd)
         worker.moveToThread(thread)
 
-        # Prepojenie signálov
         thread.started.connect(worker.run)
         worker.output_line.connect(progress.add_log_message)
         
-        # === KĽÚČOVÁ OPRAVA ZAMRZNUTIA ===
-        # Priamo prepojíme ukončenie na natívny slot progress.accept.
-        # Qt vďaka tomu prenesie zatvorenie okna bezpečne na hlavné grafické vlákno.
         worker.finished.connect(progress.accept)
         
-        # Uvoľnenie prostriedkov z pamäte po dokončení
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
 
-        # 3. Spustenie asynchrónneho behu
         thread.start()
-        progress.exec()  # Blokuje kód tu, kým beží inštalácia na pozadí
+        progress.exec()
 
-        # 4. Bezpečné vyhodnotenie úspešnosti priamo na hlavnom vlákne po zatvorení okna
         success = AgreeExeButtonHandler.check_pyinstaller_installed(python_exe)
         
         if not success:
@@ -196,7 +174,6 @@ class AgreeExeButtonHandler:
                 QMessageBox.StandardButton.Ok
             )
         return success
-    
 
     @staticmethod
     def install_uv_to_venv_async(window, venv_path):
@@ -206,38 +183,30 @@ class AgreeExeButtonHandler:
 
         manager_type = getattr(window.core, 'package_manager', 'pip')
 
-        # Získanie inštalačného príkazu z Factory pre balíček "uv"
         from core.logic.commands.command_factory import PackageManagerFactory
         dispatcher = PackageManagerFactory.get_dispatcher(manager_type, venv_path)
         cmd = dispatcher.get("install", package_name="uv")
 
-        # 1. Zostavenie ProgressDialogu
         progress = ProgressDialog(window)
         progress.setWindowTitle(LanguageManager.get("title_installing_uv", "Inštalácia UV"))
         progress.set_message(LanguageManager.get("msg_installing_uv", "Sťahujem a inštalujem inštalátor UV (Astral) do prostredia..."))
-        progress.set_progress_mode(indeterminate=True) # Behajúci pásik (bežec)
+        progress.set_progress_mode(indeterminate=True)
 
-        # 2. Príprava vlákna a asynchrónneho workera
         thread = QThread()
         worker = PipCommandWorker(venv_path, cmd)
         worker.moveToThread(thread)
 
-        # Prepojenie signálov
         thread.started.connect(worker.run)
         worker.output_line.connect(progress.add_log_message)
         
-        # Bezpečné zatvorenie okna cez frontu správ grafického vlákna
         worker.finished.connect(progress.accept)
         
-        # Uvoľnenie prostriedkov z pamäte po dokončení
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
 
-        # 3. Spustenie asynchrónneho behu
         thread.start()
         progress.exec()
 
-        # 4. Vyhodnotenie úspešnosti (overíme priamo na disku)
         success = UVExeInstaller.is_uv_in_venv(venv_path)
         return success

@@ -381,3 +381,55 @@ QPushButton#btn_vscode[ide_type="vscode"] {
 QPushButton#btn_vscode[ide_type="cursor"] {
     qproperty-icon: url({{CORE_THEMES_DIR}}/icon/cursor/cursor_icon.svg);
 }
+
+
+
+/* 1. TLAČIDLO OK (Rovnaký rámček a farby ako v celom zvyšku QSS) */
+#CustomMessageBox QPushButton {
+    background-color: #333333;
+    color: #eeeeee;
+    border: 1px solid #444444;
+    border-radius: 4px;
+    padding: 5px 15px;
+    min-width: 70px;
+}
+
+#CustomMessageBox QPushButton:hover {
+    background-color: #444444;
+    border-color: #007acc;
+    color: #ffffff;
+}
+
+#CustomMessageBox QPushButton:pressed {
+    background-color: #005a9e;
+    color: white;
+}
+
+/* 2. KRÍŽIK X V LIŠTE (Presné ID prebije štýl hore - zruší modrú výplň aj rámik) */
+#CustomMessageBox QPushButton#btn_close {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 0px;
+    min-width: 45px;
+    max-width: 45px;
+    min-height: 32px;
+    max-height: 32px;
+    color: #cccccc;
+}
+
+#CustomMessageBox QPushButton#btn_close:hover {
+    background-color: #e81123;
+    border: none;
+    color: #ffffff;
+}
+
+#CustomMessageBox QPushButton#btn_close:pressed {
+    background-color: #f1707a;
+    border: none;
+}
+
+
+
+
+

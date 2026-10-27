@@ -19,6 +19,10 @@ from core.logic.sluzby.sanitize_venv_name import sanitize_venv_name
 
 from core.logic.sluzby.log_print_desktop import DesktopLogger
 from core.logic.sluzby.embed_python_created import EmbedPythonCreated
+from core.logic.sluzby.apt_logic import AptLogic
+
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
 
 LOGGING_ENABLED = False
 create_logger = DesktopLogger(is_enabled=LOGGING_ENABLED, filename="VENV_CREATE_LOG.txt")
@@ -143,12 +147,35 @@ class VenvCreatorWorker(QObject):
                         "4. Inštalujem základné nástroje (setuptools, wheel)...",
                     )
                 )
-                subprocess.run(
+                tools_result = subprocess.run(
                     [pip_exe, "install", "setuptools", "wheel"],
                     capture_output=True,
                     text=True,
                     creationflags=CREATE_NO_WINDOW
                 )
+                if tools_result.returncode != 0:
+                    # Nie je fatálne (napr. offline), ale snímka systémových balíčkov
+                    # zachytí len to, čo na disku naozaj je.
+                    create_logger.write(f"UPOZORNENIE: setuptools/wheel sa nenainštalovali:\n{tools_result.stderr}")
+                    self.progress_log.emit(
+                        LanguageManager.get(
+                            "msg_create_tools_failed",
+                            "Upozornenie: setuptools/wheel sa nepodarilo nainštalovať.",
+                        )
+                    )
+
+            # --- SNÍMKA SYSTÉMOVÝCH BALÍČKOV (základ venvu, ktorý sa nikdy nemaže) ---
+            self.progress_log.emit(
+                LanguageManager.get(
+                    "msg_create_system_snapshot", "Zapisujem systémové balíčky prostredia..."
+                )
+            )
+            try:
+                snapshot = AptLogic.snapshot_system_packages(self.venv_path)
+                create_logger.write(f"SYSTÉMOVÉ BALÍČKY: {snapshot}")
+            except Exception as snap_err:
+                # Nie je fatálne: pri prvom použití APT sa snímka odhadne z CORE_TOOLS.
+                create_logger.write(f"UPOZORNENIE: snímku systémových balíčkov sa nepodarilo zapísať: {snap_err}")
 
             # Rodný list generujeme priamo tu na pozadí!
             self.progress_log.emit(
@@ -194,7 +221,8 @@ class CreateVenvHandler:
     @staticmethod
     def run(parent, core, py_list):
         if not core.active_project:
-            QMessageBox.warning(
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(
                 parent,
                 LanguageManager.get("title_error", "Chyba"),
                 LanguageManager.get("err_select_project", "Vyberte projekt."),
@@ -218,7 +246,8 @@ class CreateVenvHandler:
         full_path = Paths.get_venv_path(core.venv_hub_root, folder_name)
 
         if os.path.exists(full_path):
-            QMessageBox.warning(
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(
                 parent,
                 LanguageManager.get("title_error", "Chyba"),
                 LanguageManager.get(
@@ -287,7 +316,8 @@ class CreateVenvHandler:
                     project_path, full_path
                 )
             except Exception as e:
-                QMessageBox.critical(
+                # --- ZMENA NA NAŠU LIŠTU ---
+                CustomMessageBox.critical(
                     parent,
                     LanguageManager.get("title_vscode_error", "Chyba VS Code"),
                     LanguageManager.get(
@@ -300,7 +330,8 @@ class CreateVenvHandler:
 
         def on_error(msg):
             progress_dialog.reject()
-            QMessageBox.critical(
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.critical(
                 parent,
                 LanguageManager.get("title_error", "Chyba"),
                 LanguageManager.get(

@@ -3,9 +3,12 @@
 #----------------------------------------
 
 import os
-from PyQt6.QtWidgets import QFileDialog, QTableWidgetItem, QMessageBox
+from PyQt6.QtWidgets import QFileDialog, QTableWidgetItem
 from core.logic.language_manager import LanguageManager
-from core._path import Paths  # PRIDANÉ PRE ZISŤOVANIE CESTY K PROJEKTU
+from core._path import Paths
+
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
 
 class AssetsButtonsHandler:
     
@@ -13,7 +16,6 @@ class AssetsButtonsHandler:
     def add_file(window):
         title = LanguageManager.get("dialog_add_data_file", "Pridať súbor")
         
-        # Zistíme aktuálnu cestu projektu, aby sa dialóg otvoril tam (oprava rýchlosti a správneho miesta)
         current_dir = ""
         active_project = window.combo_project.currentText()
         if active_project and window.core.projects_root:
@@ -31,7 +33,6 @@ class AssetsButtonsHandler:
     def add_dir(window):
         title = LanguageManager.get("dialog_add_data_dir", "Pridať priečinok")
         
-        # Zistíme aktuálnu cestu projektu, aby sa dialóg otvoril tam (oprava rýchlosti a správneho miesta)
         current_dir = ""
         active_project = window.combo_project.currentText()
         if active_project and window.core.projects_root:
@@ -51,7 +52,8 @@ class AssetsButtonsHandler:
                 
                 # Ak cesta začína na "..", používateľ vybral priečinok mimo projektu
                 if relative_path.startswith(".."):
-                    QMessageBox.warning(
+                    # --- ZMENA NA NAŠU LIŠTU ---
+                    CustomMessageBox.warning(
                         window,
                         LanguageManager.get("title_warning_outside_project", "Pozor - Mimo projektu!"),
                         LanguageManager.get("msg_folder_outside_project_detail", "Vybraný priečinok sa nenachádza v aktuálnom projekte '{0}'.\n\nOčakávaný koreň: {1}\nVybrali ste: {2}\n\nAkcia bola zrušená.").format(project_name, project_root, dir_path_norm)
@@ -63,7 +65,8 @@ class AssetsButtonsHandler:
                 
             except ValueError:
                 # Ak je priečinok na úplne inom disku
-                QMessageBox.critical(
+                # --- ZMENA NA NAŠU LIŠTU ---
+                CustomMessageBox.critical(
                     window, 
                     LanguageManager.get("title_critical_error", "Kritická Chyba"), 
                     LanguageManager.get("msg_folder_on_different_drive", "Vybraný priečinok sa nachádza na inom disku ako aktuálny projekt!\nAkcia bola zrušená.")
@@ -78,8 +81,6 @@ class AssetsButtonsHandler:
 
     @staticmethod
     def remove_selected(window):
-        # Získame indexy vybraných riadkov a zoradíme ich zostupne,
-        # aby sme pri mazaní nenarušili poradie.
         selected_rows = set(item.row() for item in window.table_data.selectedItems())
         
         for row in sorted(selected_rows, reverse=True):
@@ -94,9 +95,7 @@ class AssetsButtonsHandler:
         row_count = window.table_data.rowCount()
         window.table_data.insertRow(row_count)
         
-        # Zdrojová cesta (Iba na čítanie)
         src_item = QTableWidgetItem(source)
-        # destination môže používateľ prepísať
         dst_item = QTableWidgetItem(destination)
         
         window.table_data.setItem(row_count, 0, src_item)

@@ -12,7 +12,7 @@
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>VenvHub Pro</h2>
-            <span>Užívateľský Manuál v2.5.14</span>
+            <span>Užívateľský Manuál v2.6.01</span>
         </div>
         <div class="nav-links">
             <a href="features.html">✨ Prehľad Vlastností</a>
@@ -31,19 +31,20 @@
 
             <!-- PODKAPITOLY PRE LOKÁLNE BALÍČKY -->
             <div class="sub-menu">
-                <a href="#princip">10.1 Princíp dynamického prepájania</a>
-                <a href="#struktura">10.2 Štruktúra (local_meta.json)</a>
+                <a href="#princip">10.1 Princíp fungovania (.pth injektor)</a>
+                <a href="#struktura">10.2 Štruktúra a kompletný local_meta.json</a>
                 <a href="#nastavenie">10.3 Nastavenie koreňovej cesty</a>
                 <a href="#pouzitie">10.4 Prelinkovanie do Venvu</a>
-                <a href="#vscode">10.5 Integrácia s VS Code</a>
-                <a href="#pyinstaller">10.6 Pribalenie do .EXE</a>
+                <a href="#vscode">10.5 Integrácia s VS Code a Cursor AI</a>
+                <a href="#pyinstaller">10.6 Pribalenie do .EXE (PyInstaller)</a>
                 <a href="#samooprava">10.7 Samooprava na USB (Portable)</a>
                 <a href="#sietove-disky">10.8 Sieťové disky a NAS</a>
+                <a href="#zivotny-cyklus">10.9 Vývoj ➡️ Copy & Paste do projektu</a>
             </div>
 
             <a href="pip_editable.html">✏️ 11. Editovateľné balíčky (pip -e)</a>
-            <a href="vscode_user.html">💻 12. VS Code Profily</a>
-            <a href="vscode_integration.html">🔌 13. VS Code Integrácia</a>
+            <a href="vscode_user.html">💻 12. VS Code & Cursor Profily</a>
+            <a href="vscode_integration.html">🔌 13. IDE Integrácia</a>
             <a href="samoreplikacia_venvhub.html">14. Architektúra a Kompilácia</a>
         </div>
     </div>
@@ -53,71 +54,118 @@
 
         <!-- PODKAPITOLA 10.1 -->
         <div id="princip" class="section-box">
-            <h1>10. Lokálne balíčky (Shared Libraries)</h1>
+            <h1>10. Lokálne balíčky (Shared Libraries / Linker)</h1>
             
-            <h2>10.1 Princíp fungovania (Bez UAC)</h2>
-            <p>Funkcia <strong>Lokálne balíčky</strong> rieši častý problém vývojárov: ako efektívne zdieľať vlastný kód (knižnice, moduly) medzi viacerými projektmi bez nutnosti ich neustáleho kopírovania alebo inštalovania.</p>
+            <h2>10.1 Princíp fungovania (Natívny .pth injektor bez UAC)</h2>
+            <p>Funkcia <strong>Lokálne balíčky (Linker)</strong> rieši základnú potrebu moderného Python vývojára: <strong>ako vyvíjať modul alebo plugin na jednom mieste a okamžite ho používať v ľubovoľnom projekte bez neustáleho kopírovania, buildovania či inštalovania cez pip</strong>.</p>
             
-            <p>VenvHub Pro na prepojenie nevyžaduje <strong>žiadne administrátorské práva (UAC)</strong> a nevytvára fyzické kópie ani zástupcov (Junctions) na disku. Namiesto toho využíva mimoriadne čistú, rýchlu a bezpečnú architektúru <strong>Python Import Hooks (sys.meta_path)</strong>. Systém automaticky vyrieši:</p>
+            <p>VenvHub Pro nevyžaduje <strong>žiadne administrátorské práva (UAC)</strong> a nevytvára rizikové zástupcov (NTFS Junctions) na disku. Využíva oficiálny a najstabilnejší štandard Python ekosystému: <strong>injektovanie ciest cez <code>venvhub_links.pth</code></strong> priamo v priečinku <code>site-packages</code> cieľového Venvu.</p>
+            
+            <h3>Ako to funguje pod kapotou:</h3>
             <ul>
-                <li>Vytvorenie mapovacieho súboru <code>venvhub.json</code> v zložke <code>site-packages</code> cieľového Venvu.</li>
-                <li>Vloženie dynamického spúšťača (<code>.pth</code> a <code>.py</code> súbor), ktorý pri štarte Pythonu zachytí vaše importy a nasmeruje ich priamo k vašim kódom.</li>
-                <li>Automatickú tichú inštaláciu potrebných externých (PIP/UV) závislostí pre daný balíček.</li>
-                <li>Kompletné injektovanie absolútnych ciest a úloh do VS Code (IntelliSense).</li>
+                <li><strong>Priame zaradenie do <code>sys.path</code>:</strong> Pri prelinkovaní zapíše VenvHub Pro absolútnu cestu k vášmu balíčku do súboru <code>site-packages/venvhub_links.pth</code>. Python pri každom štarte súbor automaticky prečíta a okamžite sprístupní vaše moduly.</li>
+                <li><strong>100% podpora pre IntelliSense (VS Code & Cursor AI):</strong> Statické analyzátory (Pylance / Pyright) natívne čítajú <code>.pth</code> súbory z aktívneho prostredia. Vďaka tomu okamžite funguje automatické dopĺňanie kódu, nápovedy, typová kontrola a skok na definíciu (<code>F12</code>) bez varovných hlášok <em>Import could not be resolved</em>.</li>
+                <li><strong>Automatické riešenie závislostí:</strong> Ak váš balíček vyžaduje externé knižnice z PyPI (napr. <code>colorama</code>, <code>requests</code>), Linker ich pri zapnutí balíčka ticho a synchrónne doinštaluje cez vybraný inštalátor (Pip alebo UV).</li>
+                <li><strong>Kompletná správa IDE:</strong> Do editora sa automaticky prenesú potrebné pluginy, nastavenia, príkazy (Tasks) aj klávesové skratky definované v metadátach balíčka.</li>
             </ul>
         </div>
 
         <!-- PODKAPITOLA 10.2 -->
         <div id="struktura" class="section-box">
-            <h2>10.2 Štruktúra balíčka (local_meta.json)</h2>
-            <p>Aby VenvHub Pro vedel s vaším balíčkom pracovať, musí každý priečinok v archíve obsahovať konfiguračný súbor <code>local_meta.json</code>. Tento súbor definuje meno, verziu a to, čo balíček vyžaduje.</p>
+            <h2>10.2 Štruktúra balíčka a predloha <code>local_meta.json</code></h2>
+            <p>Každý priečinok v archíve lokálnych balíčkov predstavuje samostatný modul a musí obsahovať konfiguračný súbor <code>local_meta.json</code>. Tento súbor riadi správanie balíčka, jeho závislosti a prepojenie s vývojovým prostredím.</p>
 
-            <h3>Príklad zápisu metadát:</h3>
-            <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto;">
+            <h3>Kompletná predloha konfigurácie (Master Template):</h3>
+            <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: Consolas, monospace; font-size: 13px;">
 {
-    "name": "MojaDatabaza",
-    "version": "1.2.0",
-    "short_description": "Zabezpečuje pripojenie na MongoDB",
-    "requires_local": ["MojLogger"],
-    "requires_pip": ["colorama", "pymongo"],
+    "name": "alert",
+    "version": "1.0.0",
+    "short_description": "Notifikačný systém pre vizuálne a zvukové upozornenia",
+    "import_path": "src.logic.alert",
+    "requires_local": ["logger_service"],
+    "requires_pip": ["colorama>=0.4.6", "requests"],
     "vscode_integration": {
+        "extensions": [
+            "pkief.material-icon-theme"
+        ],
+        "settings": {
+            "python.analysis.typeCheckingMode": "basic"
+        },
         "tasks": [
             {
-                "label": "Zmazať Cache databázy",
+                "label": "Testovať Alert modul",
                 "type": "shell",
-                "command": "python -c \"import db; db.clear()\""
+                "command": "python -m unittest discover -s tests"
             }
         ],
         "keybindings": [
             {
-                "key": "ctrl+shift+d",
+                "key": "ctrl+shift+a",
                 "command": "workbench.action.tasks.runTask",
-                "args": "Zmazať Cache databázy"
+                "args": "Testovať Alert modul"
             }
         ]
     }
 }</pre>
 
-            <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <h3>Detailné vysvetlenie všetkých parametrov:</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">
                 <tr style="background-color: #f1f1f1; text-align: left;">
-                    <th style="padding: 10px; border: 1px solid #ddd;">Kľúč</th>
-                    <th style="padding: 10px; border: 1px solid #ddd;">Význam</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; width: 25%;">Kľúč / Sekcia</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; width: 15%;">Typ</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Význam a funkcia v systéme</th>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>name</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>String (povinný)</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Názov priečinka balíčka na disku a jeho interný identifikátor v aplikácii.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>version</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>String</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Sémantická verzia balíčka (zobrazuje sa v tabuľkách správcu).</td>
                 </tr>
                 <tr>
                     <td style="padding: 10px; border: 1px solid #ddd;"><code>short_description</code></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">Krátky popis, ktorý sa zobrazí v tabuľke priamo v aplikácii VenvHub Pro.</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>String</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Stručný popis funkcionality zobrazený v okne výberu lokálnych balíčkov.</td>
+                </tr>
+                <tr style="background-color: #fcf8e3;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>import_path</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>String (kľúčový)</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">
+                        <strong>Cieľová importovacia cesta v kóde.</strong> Ak vyvíjate modul určený pre vnorenú zložku (napr. <code>src/logic/alert/</code>), sem zadáte <code>"src.logic.alert"</code>. Vďaka tomu píšete v hlavnom projekte finálny import <code>from src.logic.alert import send_alert</code> už počas vývoja v Linkeri.
+                    </td>
                 </tr>
                 <tr>
                     <td style="padding: 10px; border: 1px solid #ddd;"><code>requires_local</code></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam mien iných priečinkov v tom istom archíve, ktoré tento balíček potrebuje.</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>Array of String</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam iných lokálnych balíčkov z vášho archívu, ktoré tento balíček vyžaduje. Linker ich pri zaškrtnutí automaticky rekurzívne pripojí.</td>
                 </tr>
                 <tr>
                     <td style="padding: 10px; border: 1px solid #ddd;"><code>requires_pip</code></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam balíčkov z PyPI, ktoré sa majú automaticky doinštalovať.</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>Array of String</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam PyPI závislostí vrátane špecifikácie verzií (napr. <code>"requests>=2.28.0"</code>). Linker ich automaticky nainštaluje a APT subsystém ich ochráni.</td>
                 </tr>
-                <tr>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><code>vscode_integration</code></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">Umožňuje definovať vlastné príkazy (Tasks) a klávesové skratky, ktoré sa automaticky pridajú do cieľového projektu.</td>
+                <tr style="background-color: #f0f7ff;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>vscode_integration.extensions</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>Array of String</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Zoznam rozšírení pre VS Code a Cursor AI (napr. ikony, lintery), ktoré <code>AptIDELogic</code> automaticky nainštaluje do aktívneho profilu a pri odlinkovaní bezpečne odstráni (Autoremove).</td>
+                </tr>
+                <tr style="background-color: #f0f7ff;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>vscode_integration.settings</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>Object (Key-Value)</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Špecifické konfiguračné kľúče, ktoré sa zapíšu do projektového <code>.vscode/settings.json</code>.</td>
+                </tr>
+                <tr style="background-color: #f0f7ff;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>vscode_integration.tasks</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>Array of Object</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Definície spustiteľných úloh, ktoré sa bezpečne vložia do <code>.vscode/tasks.json</code>.</td>
+                </tr>
+                <tr style="background-color: #f0f7ff;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><code>vscode_integration.keybindings</code></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><em>Array of Object</em></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Definície klávesových skratiek, ktoré sa pridajú do <code>.vscode/keybindings.json</code>.</td>
                 </tr>
             </table>
         </div>
@@ -125,69 +173,52 @@
         <!-- PODKAPITOLA 10.3 -->
         <div id="nastavenie" class="section-box">
             <h2>10.3 Nastavenie koreňovej cesty</h2>
-            <p>Pred prvým použitím musíte aplikácii povedať, kde sa nachádza váš archív lokálnych kódov:</p>
+            <p>Pred prvým použitím Linkera definujte spoločný priečinok pre vaše zdieľané balíčky:</p>
             <ol>
                 <li>Otvorte <strong>Manager (🖥️)</strong> -> záložka <strong>Nastavenia</strong>.</li>
-                <li>V sekcii <strong>Základné cesty</strong> nájdite položku <strong>Lokálne balíčky</strong>.</li>
-                <li>Kliknite na ikonu priečinka 📁 a vyberte zložku, v ktorej máte svoje moduly (každý modul vo vlastnej podzložke).</li>
+                <li>V sekcii <strong>Základné cesty</strong> nájdite riadok <strong>Lokálne balíčky</strong>.</li>
+                <li>Kliknite na ikonu 📁 a vyberte priečinok (napr. <code>F:\Python_local_packages\linker\</code>), v ktorom má každý balíček svoj vlastný podadresár.</li>
             </ol>
-            <div class="tip">
-                <strong>Tip:</strong> Ak používate Portable verziu na USB kľúči, cesta sa automaticky prispôsobí aktuálnemu písmenu disku.
-            </div>
         </div>
 
         <!-- PODKAPITOLA 10.4 -->
         <div id="pouzitie" class="section-box">
             <h2>10.4 Prelinkovanie do Venvu</h2>
-            <p>Samotné pridanie balíčka do konkrétneho prostredia prebieha nasledovne:</p>
+            <p>Prepojenie vybraných knižníc s konkrétnym virtuálnym prostredím je otázkou niekoľkých sekúnd:</p>
             <ol>
-                <li>V tabuľke prostredí kliknite <strong>pravým tlačidlom</strong> na vybraný Venv.</li>
+                <li>V Správcovi na záložke <em>Správa Venvs</em> kliknite <strong>pravým tlačidlom myši</strong> na cieľové prostredie.</li>
                 <li>Zvoľte možnosť <strong>🔗 Lokálne balíčky</strong>.</li>
-                <li>V otvorenom okne zaškrtnite balíčky, ktoré chcete v projekte používať.</li>
+                <li>V tabuľke zaškrtnite moduly, ktoré chcete v projekte používať.</li>
                 <li>Kliknite na <strong>💾 Uložiť zmeny (Prelinkovať)</strong>.</li>
             </ol>
 
             <div class="alert">
-                <strong>Automatizácia závislostí:</strong> Ak zaškrtnete "Balíček A", ktorý vyžaduje "Balíček B", systém automaticky prečíta jeho `local_meta.json`, zapíše obe cesty do `venvhub.json` vo Venve a ticho doinštaluje všetky potrebné PIP balíčky.
+                <strong>Plná orchestrácia na pozadí:</strong> Linker zapíše cesty do <code>venvhub_links.pth</code> vo Venve, aktualizuje <code>venvhub.json</code>, ticho doinštaluje chýbajúce PyPI balíčky, nainštaluje IDE rozšírenia do profilu a prepojí VS Code konfiguráciu.
             </div>
         </div>
 
-        <!-- PODKAPITOLA 10.5 (AKTUALIZOVANÁ O HYBRIDNÝ BRUTAL CHECK A TRACKER) -->
+        <!-- PODKAPITOLA 10.5 -->
         <div id="vscode" class="section-box">
-            <h2>10.5 Integrácia s VS Code</h2>
-            <p>Jednou z hlavných výhod VenvHub Pro je koordinovaná synchronizácia s vývojovým prostredím VS Code. Keď urobíte zmenu v nastavení lokálnych balíčkov alebo prepnete aktívne virtuálne prostredie, systém vykoná nasledujúce operácie:</p>
+            <h2>10.5 Integrácia s VS Code a Cursor AI</h2>
+            <p>VenvHub Pro udržiava vývojové prostredia (VS Code aj Cursor AI) v dokonalej synchronizácii s virtuálnym prostredím:</p>
             <ul>
-                <li>VenvHub Pro prečíta súbor <code>venvhub.json</code> v danom prostredí a extrahuje z neho absolútne cesty pripojených lokálnych knižníc.</li>
-                <li>Tieto cesty odošle do konfiguračného poľa <code>python.analysis.extraPaths</code> v súbore <code>settings.json</code> vášho VS Code projektu. Pylance a IntelliSense vďaka tomu okamžite rozpoznajú vaše importy a kód nebude vykazovať falošné chybové hlásenia.</li>
-                <li>Do projektu sa podľa konfigurácie v metadátach pripoja vlastné úlohy (<code>tasks.json</code>) a klávesové skratky (<code>keybindings.json</code>).</li>
+                <li><strong>Okamžitý Pylance IntelliSense:</strong> Cesty zo súboru <code>venvhub_links.pth</code> a zoznam <code>python.analysis.extraPaths</code> v <code>settings.json</code> zaručujú, že editor okamžite pozná všetky vaše typy, funkcie a docstringy.</li>
+                <li><strong>Autonómny APT IDE Subsystém:</strong> Rozšírenia vyžiadané cez <code>vscode_integration.extensions</code> sú automaticky nainštalované priamo do dátového priečinka aktívneho profilu.</li>
+                <li><strong>Ochrana používateľských úprav (Brutal Check & Tracker):</strong> Všetky vložené úlohy a skratky sú evidované v súbore <code>.vscode/venvhub_tracker.json</code>. Linker pri zmenách manipuluje výhradne so svojimi záznamami a nikdy nezmaže vaše vlastné úlohy či konfigurácie.</li>
             </ul>
-
-            <div class="tip" style="border-left-color: #007acc; background-color: #f0f7ff; margin-top: 20px; padding: 15px; border-radius: 5px;">
-                <strong style="color: #007acc;">🛡️ Hybridný mechanizmus (Brutal Check) a súbor venvhub_tracker.json:</strong>
-                <p style="margin-top: 10px;">Aby VenvHub Pro pri odstraňovaní balíčkov omylom nezasiahol do úloh a skratiek, ktoré ste si vo VS Code vytvorili vy sami ručne, využíva kombinovaný overovací mechanizmus:</p>
-                <ol style="margin-top: 10px; margin-bottom: 10px; padding-left: 20px;">
-                    <li style="margin-bottom: 8px;"><strong>Záznam o zápise (Účtenka):</strong> Pri každej integrácii úloh alebo skratiek si aplikácia zapíše presný zoznam vykonaných zmien do pomocného súboru <code>.vscode/venvhub_tracker.json</code>.</li>
-                    <li style="margin-bottom: 8px;"><strong>Prioritné čítanie z disku:</strong> Pri odškrtnutí (deaktivácii) balíčka sa systém pokúsi prečítať zoznam úloh na vymazanie priamo z jeho <code>local_meta.json</code> na disku a korektne ich odstráni zo súborov VS Code.</li>
-                    <li style="margin-bottom: 8px;"><strong>Záchranná brzda (Smazanie cez Prieskumník):</strong> Ak zistíte, že ste priečinok s balíčkom predtým zmazali ručne cez Windows Prieskumník (čiže jeho <code>local_meta.json</code> už neexistuje), VenvHub Pro automaticky použije dáta zo súboru <code>venvhub_tracker.json</code>, vyhľadá osirelé záznamy a bezpečne ich z konfigurácie VS Code vymaže.</li>
-                    <li style="margin-bottom: 8px;"><strong>Zosúladenie pri prepínaní Venvov:</strong> Ak v rámci jedného projektu prepnete aktívne prostredie (napr. z Venvu A s lokálnymi balíčkami na Venv B bez balíčkov), synchronizátor na pozadí automaticky odstráni z editora úlohy patriace starému prostrediu a pripraví čisté rozhranie pre nové prostredie podľa jeho konfigurácie.</li>
-                    <li style="margin-bottom: 0;"><strong>Automatické upratovanie prázdnych konfigurácií:</strong> Ak po odinštalovaní balíčka alebo prepnutí Venvu nezostanú vo VS Code žiadne ďalšie aktívne úlohy či skratky, VenvHub Pro fyzicky odstráni súbory <code>tasks.json</code>, <code>keybindings.json</code> aj samotný <code>venvhub_tracker.json</code>, čím zabraňuje hromadeniu prázdneho balastu v priečinku projektu.</li>
-                </ol>
-            </div>
         </div>
 
         <!-- PODKAPITOLA 10.6 -->
         <div id="pyinstaller" class="section-box">
             <h2>10.6 Pribalenie do PyInstallera (.EXE)</h2>
-            <p>Vzhľadom na novú bez-UAC architektúru (Import Hooks) nie sú lokálne balíčky fyzicky prítomné v zložke prostredia. Klasický PyInstaller by ich pri statickej analýze kódu automaticky nenašiel.</p>
+            <p>Pri kompilácii projektu do finálneho <code>.exe</code> programu cez záložku <strong>PyInstaller Builder</strong> nemusíte pre lokálne balíčky nastavovať žiadne špeciálne parametre.</p>
             
             <div class="tip">
-                <strong>VenvHub Auto-Injector (Plná automatizácia):</strong> 
-                Pri tvorbe finálneho <code>.exe</code> programu nemusíte v PyInstaller Builderi robiť ohľadom lokálnych balíčkov <strong>vôbec nič navyše!</strong> 
-                <br><br>
-                VenvHub Pro Builder obsahuje inteligentný predprocesor. Pred spustením PyInstallera automaticky prečíta súbor <code>venvhub.json</code> vo vašom prostredí a sám na pozadí vygeneruje:
+                <strong>VenvHub Auto-Injector:</strong> 
+                Pred spustením PyInstallera analyzátor automaticky prečíta aktívne prelinkovania a vygeneruje:
                 <ul style="margin-top: 10px; margin-bottom: 0;">
-                    <li>Parameter <code>--paths</code>, vďaka ktorému PyInstaller okamžite nájde všetok váš Python kód z lokálnych balíčkov (bez nutnosti vypisovať "Skryté importy").</li>
-                    <li>Parameter <code>--add-data</code> pre každý jeden prepojený balíček. Aplikácia automaticky pribalí všetky vaše obrázky, .json konfigurácie a UI šablóny, ktoré sa nachádzajú vo vašich moduloch, priamo do výsledného <code>.exe</code>.</li>
+                    <li>Parameter <code>--paths</code> pre každý balíček (PyInstaller nájde kompletný zdrojový kód bez nutnosti manuálneho zadávania <em>Hidden Imports</em>).</li>
+                    <li>Parameter <code>--add-data</code> pre automatické pribalenie všetkých vnútorných obrázkov, šablón, JSON súborov a assetov z vašich lokálnych balíčkov.</li>
                 </ul>
             </div>
         </div>
@@ -195,29 +226,100 @@
         <!-- PODKAPITOLA 10.7 -->
         <div id="samooprava" class="section-box">
             <h2>10.7 Samooprava ciest na USB kľúči (Portable režim)</h2>
-            <p>Nová architektúra robí prenášanie aplikácie a projektov na USB kľúči extrémne spoľahlivým a používateľsky príjemným.</p>
-            
             <div class="tip">
-                <strong>Blesková tichá samooprava:</strong> Vždy, keď aplikáciu spustíte na novom počítači:
-                <ol>
-                    <li>VenvHub Pro deteguje, že sa zmenilo písmeno disku (napr. z <code>E:\</code> na <code>F:\</code>).</li>
-                    <li>Otvorí súbor <code>venvhub.json</code> v zložke vášho prostredia.</li>
-                    <li>Okamžite a <strong>úplne potichu</strong> v ňom prepíše staré písmená za nové.</li>
-                </ol>
-                <p style="margin-bottom: 0;"><em>Oproti staršej verzii (ktorá používala Windows Junctions) už na opravu <strong>nikdy nevyskočí UAC okno</strong> a proces prebehne za zlomok sekundy.</em></p>
+                <strong>Okamžitá tichá oprava písmena disku:</strong> Pri spustení aplikácie na inom počítači VenvHub Pro automaticky deteguje zmenu diskového písmena (napr. z <code>E:\</code> na <code>F:\</code>) a v zlomku sekundy opraví cesty vo <code>venvhub_links.pth</code> a <code>venvhub.json</code> vo všetkých prostrediach. Operácia nevyžaduje administrátorské práva a prebehne úplne bez zásahu používateľa.
             </div>
         </div>
-
 
         <!-- PODKAPITOLA 10.8 -->
         <div id="sietove-disky" class="section-box">
             <h2>10.8 Sieťové disky (NAS a zdieľané zložky)</h2>
             <div class="tip" style="border-left-color: #28a745; background-color: #eafaf1; color: #333;">
-                <strong>✅ Plná podpora pre umiestnenie kdekoľvek!</strong>
-                <p style="margin-top: 10px; margin-bottom: 0;">Obrovskou výhodou novej "Hook" architektúry (oproti zastaraným Pevným väzbám) je to, že váš "Koreň lokálnych balíčkov" <strong>môže byť umiestnený naozaj kdekoľvek</strong>. </p>
-                <br>
-                <p style="margin-bottom: 0;">Či už ide o váš lokálny disk, sieťový disk (NAS), alebo cloudovú zložku – všetko funguje bez problémov. Keďže VenvHub Pro zapisuje cesty iba ako bežný text do JSON súboru, operačnému systému (Windows/Linux) už nezáleží na tom, na akom type disku sa dáta fyzicky nachádzajú.</p>
+                <strong>✅ Plná podpora pre UNC a namapované disky:</strong>
+                Archív lokálnych balíčkov môže byť umiestnený na lokálnom disku, sieťovom úložisku (NAS) aj v cloudovom synchronizačnom priečinku. Natívny systém <code>.pth</code> zápisu podporuje štandardné Windows cesty (<code>Z:\...</code>) aj sieťové UNC formáty (<code>\\Server\Share\...</code>).
             </div>
+        </div>
+
+        <!-- PODKAPITOLA 10.9 (NOVÁ KOMPLETNÁ KAPITOLA PRE MIGRÁCIU) -->
+        <div id="zivotny-cyklus" class="section-box" style="border-left: 5px solid #2ecc71;">
+            <h2>10.9 Životný cyklus: Vývoj v Linkeri ➡️ Copy & Paste do projektu</h2>
+            <p>VenvHub Pro umožňuje unikátny pracovný postup: <strong>balíček vyvíjate ako externý modul s plnou podporou našepkávania, a po dokončení ho iba skopírujete do štruktúry projektu bez nutnosti prepisovať akýkoľvek import v kóde.</strong></p>
+
+            <h3>1. Štruktúra dvoch variantov balíčka:</h3>
+            <div style="display: flex; gap: 20px; margin-top: 15px;">
+                
+                <!-- VARIANTA A -->
+                <div style="flex: 1; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; padding: 15px;">
+                    <h4 style="margin-top: 0; color: #007acc;">Varianta A: Priamy balíček (Flat)</h4>
+                    <p style="font-size: 13px; color: #666;">Vhodné pre jednoduché utility a nástroje (import priamo pod názvom balíčka).</p>
+                    <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 12px;">
+📁 archiv_balickov/
+└── 📁 alert/
+    ├── local_meta.json
+    ├── __init__.py
+    └── core.py</pre>
+                    <p style="font-size: 13px;"><strong>Import v projekte:</strong><br><code>from alert import send_alert</code></p>
+                    <p style="font-size: 13px;"><strong>Cieľ v projekte po skončení:</strong><br><code>MojProjekt/alert/</code> (vedľa <code>main.py</code>)</p>
+                </div>
+
+                <!-- VARIANTA B -->
+                <div style="flex: 1; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; padding: 15px;">
+                    <h4 style="margin-top: 0; color: #2ecc71;">Varianta B: Vnorené balíčky (Hierarchické)</h4>
+                    <p style="font-size: 13px; color: #666;">Vhodné pre moduly určené do vnorených zložiek (napr. <code>src/logic/alert</code>).</p>
+                    <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 12px;">
+📁 archiv_balickov/
+└── 📁 alert/
+    ├── local_meta.json
+    └── 📁 src/
+        └── 📁 logic/
+            └── 📁 alert/
+                ├── __init__.py
+                └── core.py</pre>
+                    <p style="font-size: 13px;"><strong>Import v projekte:</strong><br><code>from src.logic.alert import send_alert</code></p>
+                    <p style="font-size: 13px;"><strong>Cieľ v projekte po skončení:</strong><br><code>MojProjekt/src/logic/alert/</code></p>
+                </div>
+
+            </div>
+
+            <h3 style="margin-top: 25px;">2. Postup krok za krokom (Praktický príklad):</h3>
+            
+            <div style="background-color: #fcfcfc; border-left: 4px solid #007acc; padding: 15px; margin-bottom: 15px;">
+                <h4 style="margin-top: 0; color: #007acc;">Krok 1: Vývoj v Linkeri</h4>
+                <ol style="margin-bottom: 0; padding-left: 20px;">
+                    <li>Vytvorte balíček podľa <em>Varianty B</em> v archíve lokálnych balíčkov.</li>
+                    <li>V <code>local_meta.json</code> nastavte <code>"import_path": "src.logic.alert"</code>.</li>
+                    <li>Vo VenvHube otvorte <strong>Lokálne balíčky</strong> a zaškrtnite <code>alert</code> -> kliknite na <strong>Uložiť zmeny (Prelinkovať)</strong>.</li>
+                    <li>V hlavnom projekte (kde zložka <code>src/logic/alert</code> ešte vôbec neexistuje) vytvorte <code>main.py</code>:
+                        <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 5px;">
+from src.logic.alert import send_alert
+
+if __name__ == "__main__":
+    send_alert("Systém beží cez Linker!")</pre>
+                    </li>
+                    <li>Vo VS Code funguje 100% našepkávanie pre <code>send_alert</code> a v termináli kód bezchybne zbehne.</li>
+                </ol>
+            </div>
+
+            <div style="background-color: #fcfcfc; border-left: 4px solid #2ecc71; padding: 15px;">
+                <h4 style="margin-top: 0; color: #2ecc71;">Krok 2: Presun do produkčného projektu (Copy & Paste)</h4>
+                <ol style="margin-bottom: 0; padding-left: 20px;">
+                    <li>Skopírujte zložku <code>src</code> z Linkera priamo do priečinka vášho projektu:
+                        <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 5px;">
+MojProjekt/
+├── main.py
+└── src/
+    └── logic/
+        └── alert/
+            ├── __init__.py
+            └── core.py</pre>
+                    </li>
+                    <li>Vo VenvHube otvorte <strong>Lokálne balíčky</strong>, <strong>odškrtnite</strong> balíček <code>alert</code> a uložte zmeny (odlinkovanie).</li>
+                    <li>Spustite <code>main.py</code> vo VS Code termináli:
+                        <br>👉 <strong>Kód zbehne identicky a bez nutnosti upravovať jediný riadok importov v celom projekte.</strong>
+                    </li>
+                </ol>
+            </div>
+
         </div>
 
     </div>

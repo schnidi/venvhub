@@ -19,6 +19,9 @@ from core.logic.containers.logic.check_multi_venv import MultiVenvChecker
 from core.logic.process_registry import process_registry
 from core.logic.containers.logic.autostart_boot import AutostartBooter # PRIDANÉ PRE LOGY
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 class AutostartGroupItem(QGroupBox):
     def __init__(self, parent_window, parent=None):
         super().__init__(parent)
@@ -70,7 +73,8 @@ class AutostartGroupItem(QGroupBox):
                 group=self.group_name, 
                 conflicts="\n".join(f"- {c}" for c in conflicts)
             )
-            QMessageBox.warning(self, LanguageManager.get("autostart_group_conflict_title", "Konflikt prostredí"), msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(self, LanguageManager.get("autostart_group_conflict_title", "Konflikt prostredí"), msg)
             return
         
         # ZMENA: Smerujeme logy priamo do centrálnej pamäte!
@@ -398,13 +402,15 @@ class AutostartGroupItem(QGroupBox):
 
     def handle_delete(self):
         if not self.group_name: return
-        reply = QMessageBox.question(
+        
+        # --- ZMENA NA NAŠU LIŠTU ---
+        reply = CustomMessageBox.question(
             self,
             LanguageManager.get("autostart_group_del_title", "Odstrániť skupinu?"),
             LanguageManager.get("autostart_group_del_msg", "Naozaj chcete odstrániť skupinu '{group}' z tohto zoznamu?\n\n(Skupina nebude zmazaná z 'Hromadného spúšťania', len odtiaľto odobratá. Uložené JSON nastavenia pre túto skupinu budú zmazané.)").format(group=self.group_name),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
+        
         if reply == QMessageBox.StandardButton.Yes:
             AutostartJsonManager.delete_group(self.group_name)
             MultiVenvChecker.clear_owners_for_group(self.parent_window.core, self.group_name)

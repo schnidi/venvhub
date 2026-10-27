@@ -15,6 +15,9 @@ from core.logic.language_manager import LanguageManager
 from core.logic.vscode_user.system_sync import SystemSyncWorker
 from windows.progress_dialog import ProgressDialog
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 
 class VSCodeUserWindow(QDialog):
     # Signál: Informuje hlavné okno, že sa zmenili profily alebo aktívny používateľ
@@ -140,7 +143,7 @@ class VSCodeUserWindow(QDialog):
 
     def closeEvent(self, event):
         if self.operation_running:
-            QMessageBox.warning(
+            CustomMessageBox.warning(
                 self, 
                 LanguageManager.get("title_warning", "Upozornenie"), 
                 LanguageManager.get("msg_background_op_running", "Prebieha operácia na pozadí.\n\nProsím, počkajte na jej dokončenie alebo ju zrušte.")
@@ -221,7 +224,7 @@ class VSCodeUserWindow(QDialog):
     def on_open_folder(self):
         selected_items = self.list_vscode_users.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_first", "Najprv vyberte profil zo zoznamu."))
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_first", "Najprv vyberte profil zo zoznamu."))
             return
         user_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
         profile_path = os.path.join(self.get_current_profiles_dir(), user_id)
@@ -231,7 +234,7 @@ class VSCodeUserWindow(QDialog):
     def on_set_active(self):
         selected_items = self.list_vscode_users.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_first", "Najprv vyberte profil zo zoznamu."))
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_first", "Najprv vyberte profil zo zoznamu."))
             return
         user_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
         
@@ -252,7 +255,7 @@ class VSCodeUserWindow(QDialog):
         display_name = self.edit_display_name.text().strip()
         
         if not user_id:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_must_enter_user_id", "Musíte zadať ID Používateľa."))
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_must_enter_user_id", "Musíte zadať ID Používateľa."))
             return
             
         profiles_dir = self.get_current_profiles_dir()
@@ -271,16 +274,16 @@ class VSCodeUserWindow(QDialog):
         else:
             err_title = LanguageManager.get("title_error", "Chyba")
             self.log_message(f"{err_title}: {result['error']}")
-            QMessageBox.critical(self, err_title, result['error'])
+            CustomMessageBox.critical(self, err_title, result['error'])
 
     def on_remove_user(self):
         selected_items = self.list_vscode_users.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_to_delete", "Najprv vyberte profil, ktorý chcete zmazať."))
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_to_delete", "Najprv vyberte profil, ktorý chcete zmazať."))
             return
             
         user_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.question(
+        reply = CustomMessageBox.question(
             self, LanguageManager.get("title_delete_profile", "Zmazať profil?"), 
             LanguageManager.get("msg_confirm_delete_profile", "Naozaj chcete natrvalo vymazať profil '{0}' a VŠETKY jeho nastavenia a rozšírenia z disku?").format(user_id),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -342,18 +345,18 @@ class VSCodeUserWindow(QDialog):
         else:
             err_title = LanguageManager.get("title_error", "Chyba")
             self.log_message(f"{err_title}: {error_msg}")
-            QMessageBox.critical(self, err_title, error_msg)
+            CustomMessageBox.critical(self, err_title, error_msg)
 
     def on_import_system(self):
         selected_items = self.list_vscode_users.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_first", "Najprv vyberte profil zo zoznamu."))
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_profile_first", "Najprv vyberte profil zo zoznamu."))
             return
             
         user_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
         profile_path = os.path.join(self.get_current_profiles_dir(), user_id)
         
-        reply = QMessageBox.question(
+        reply = CustomMessageBox.question(
             self, LanguageManager.get("title_warning", "Upozornenie"), 
             LanguageManager.get("msg_confirm_overwrite_profile", "Naozaj chcete prepísať tento profil ('{0}') aktuálnymi systémovými nastaveniami a rozšíreniami?\n\nPôvodné nastavenia profilu budú zmazané.").format(user_id),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -431,7 +434,7 @@ class VSCodeUserWindow(QDialog):
         if success:
             self.log_message(LanguageManager.get("msg_import_finished_ok", "--- Import zo systému kompletne hotový ---"))
         elif reason == "INSUFFICIENT_SPACE":
-            QMessageBox.critical(self, LanguageManager.get("title_insufficient_space", "Nedostatok miesta"), LanguageManager.get("msg_insufficient_space", "Na cieľovom disku nie je dostatok voľného miesta pre import rozšírení."))
+            CustomMessageBox.critical(self, LanguageManager.get("title_insufficient_space", "Nedostatok miesta"), LanguageManager.get("msg_insufficient_space", "Na cieľovom disku nie je dostatok voľného miesta pre import rozšírení."))
         elif reason == "CANCELLED":
             self.log_message(LanguageManager.get("msg_import_cancelled", "--- Import zo systému bol zrušený používateľom a dáta boli prečistené ---"))
         else:

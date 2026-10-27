@@ -34,6 +34,11 @@ class VSCodeCommandDispatcher:
                 self.executable,
                 "--version",
             ],
+            "uninstall_extension": lambda **kwargs: [
+                self.executable,
+                "--uninstall-extension",
+                kwargs["extension_id"],
+            ],
         }
 
     def _build_launch_project_command(self, **kwargs: Any) -> list[str]:

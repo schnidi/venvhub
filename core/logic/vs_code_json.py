@@ -11,7 +11,7 @@ from core.logic.language_manager import LanguageManager
 class VSCodeIntegration:
     """
     Centrálny manažér konfigurácií pre vývojové editory (VS Code a Cursor AI).
-    Všetky nastavenia (interpreter, venvPath, extraPaths, tasks, keybindings)
+    Všetky nastavenia (interpreter, venvPath, extraPaths, tasks, keybindings, settings)
     udržiava v plnej a nezávislej synchronizácii pre oba editory.
     """
 
@@ -217,14 +217,14 @@ class VSCodeIntegration:
             VSCodeIntegration._save_json(settings_file, config)
 
     # =========================================================================
-    # 4. TASKS, KEYBINDINGS A TRACKER (ÚČTENKA) PRE OBA EDITORY
+    # 4. TASKS, KEYBINDINGS, SETTINGS A TRACKER (ÚČTENKA) PRE OBA EDITORY
     # =========================================================================
 
     @staticmethod
     def sync_vscode_tasks_and_keybindings(project_path: str, selected_paths: list[str], local_packages_root: str, log_callback=None):
         """
-        Vykoná synchronizáciu úloh a klávesových skratiek pre všetky podporované IDE.
-        Používa účtenku (tracker), takže nikdy nezmaže vlastné úlohy používateľa.
+        Vykoná synchronizáciu úloh, klávesových skratiek a nastavení pre všetky podporované IDE.
+        Používa účtenku (tracker), takže nikdy nezmaže vlastné nastavenia ani úlohy používateľa.
         """
         def log(msg):
             if log_callback:
@@ -232,7 +232,7 @@ class VSCodeIntegration:
             else:
                 print(msg)
 
-        log(LanguageManager.get("vscode_sync_start", "\n[IDE TASKS SYNC] Spúšťam synchronizáciu úloh a skratiek..."))
+        log(LanguageManager.get("vscode_sync_start", "\n[IDE INTEGRATION SYNC] Spúšťam synchronizáciu IDE konfigurácie..."))
 
         if not project_path or not os.path.exists(project_path):
             log(LanguageManager.get("vscode_sync_err_no_project", "❌ CHYBA: project_path neexistuje."))
@@ -244,10 +244,12 @@ class VSCodeIntegration:
             ide_dir = Paths.get_project_ide_dir(project_path, ide_dir_name)
             os.makedirs(ide_dir, exist_ok=True)
 
+            settings_file = Paths.get_project_ide_file_path(project_path, ide_dir_name, Paths.SETTINGS_JSON_NAME)
             tasks_file = Paths.get_project_ide_file_path(project_path, ide_dir_name, Paths.TASKS_JSON_NAME)
             keybindings_file = Paths.get_project_ide_file_path(project_path, ide_dir_name, Paths.KEYBINDINGS_JSON_NAME)
             tracker_file = Paths.get_project_ide_file_path(project_path, ide_dir_name, Paths.VENVHUB_TRACKER_JSON_NAME)
 
+            existing_settings = VSCodeIntegration._load_json(settings_file) or {}
             existing_tasks = VSCodeIntegration._load_json(tasks_file) or {"version": "2.0.0", "tasks": []}
             existing_keybindings = VSCodeIntegration._load_json(keybindings_file) or []
             tracker = VSCodeIntegration._load_json(tracker_file) or {}
@@ -255,6 +257,7 @@ class VSCodeIntegration:
             old_package_names = list(tracker.keys())
             packages_to_remove = [pkg for pkg in old_package_names if pkg not in new_package_names]
 
+            modified_settings = False
             modified_tasks = False
             modified_keys = False
 
@@ -262,6 +265,7 @@ class VSCodeIntegration:
             for pkg_name in packages_to_remove:
                 tasks_to_remove = []
                 keys_to_remove = []
+                settings_to_remove = []
 
                 pkg_dir = os.path.join(local_packages_root, pkg_name)
                 meta_path = os.path.join(pkg_dir, "local_meta.json")
@@ -274,6 +278,7 @@ class VSCodeIntegration:
                             vscode_int = meta.get("vscode_integration", {})
                             tasks_to_remove = [t.get("label") for t in vscode_int.get("tasks", []) if t.get("label")]
                             keys_to_remove = [{"key": k.get("key"), "command": k.get("command")} for k in vscode_int.get("keybindings", []) if k.get("key") and k.get("command")]
+                            settings_to_remove = list(vscode_int.get("settings", {}).keys())
                             read_from_disk = True
                     except Exception:
                         pass
@@ -282,13 +287,16 @@ class VSCodeIntegration:
                     tracker_data = tracker.get(pkg_name, {})
                     tasks_to_remove = tracker_data.get("tasks", [])
                     keys_to_remove = tracker_data.get("keybindings", [])
+                    settings_to_remove = tracker_data.get("settings", [])
 
+                # Čistenie Tasks
                 if tasks_to_remove:
                     orig_len = len(existing_tasks.get("tasks", []))
                     existing_tasks["tasks"] = [t for t in existing_tasks.get("tasks", []) if t.get("label") not in tasks_to_remove]
                     if len(existing_tasks["tasks"]) != orig_len:
                         modified_tasks = True
 
+                # Čistenie Keybindings
                 if keys_to_remove:
                     orig_len = len(existing_keybindings)
                     existing_keybindings = [
@@ -297,6 +305,13 @@ class VSCodeIntegration:
                     ]
                     if len(existing_keybindings) != orig_len:
                         modified_keys = True
+
+                # Čistenie Settings (iba kľúče pridané týmto balíčkom!)
+                if settings_to_remove:
+                    for s_key in settings_to_remove:
+                        if s_key in existing_settings:
+                            del existing_settings[s_key]
+                            modified_settings = True
 
                 del tracker[pkg_name]
 
@@ -315,10 +330,13 @@ class VSCodeIntegration:
                     vscode_int = meta.get("vscode_integration", {})
                     tasks = vscode_int.get("tasks", [])
                     keybindings = vscode_int.get("keybindings", [])
+                    custom_settings = vscode_int.get("settings", {})
 
                     injected_tasks = []
                     injected_keys = []
+                    injected_settings = []
 
+                    # Injekcia úloh (Tasks)
                     for task in tasks:
                         label = task.get("label")
                         if label and not any(t.get("label") == label for t in existing_tasks.get("tasks", [])):
@@ -326,6 +344,7 @@ class VSCodeIntegration:
                             modified_tasks = True
                             injected_tasks.append(label)
 
+                    # Injekcia skratiek (Keybindings)
                     for kb in keybindings:
                         key = kb.get("key")
                         command = kb.get("command")
@@ -334,10 +353,19 @@ class VSCodeIntegration:
                             modified_keys = True
                             injected_keys.append({"key": key, "command": command})
 
-                    if injected_tasks or injected_keys or pkg_name in tracker:
+                    # Injekcia nastavení (Settings)
+                    if custom_settings and isinstance(custom_settings, dict):
+                        for s_key, s_val in custom_settings.items():
+                            existing_settings[s_key] = s_val
+                            modified_settings = True
+                            injected_settings.append(s_key)
+
+                    # Zápis do Trackeru
+                    if injected_tasks or injected_keys or injected_settings or pkg_name in tracker:
                         tracker[pkg_name] = {
                             "tasks": injected_tasks,
-                            "keybindings": injected_keys
+                            "keybindings": injected_keys,
+                            "settings": injected_settings
                         }
 
                 except Exception as e:
@@ -348,6 +376,9 @@ class VSCodeIntegration:
                     log(msg)
 
             # --- FÁZA 3: UKLADANIE SÚBOROV PRE DANÝ EDITOR ---
+            if modified_settings:
+                VSCodeIntegration._save_json(settings_file, existing_settings)
+
             if not existing_tasks.get("tasks"):
                 if os.path.exists(tasks_file):
                     try:

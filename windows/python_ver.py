@@ -19,7 +19,10 @@ from core.logic.python_installer.button.pip_installer import PipInstaller
 
 from core.logic.sluzby.python_runtime_inspector import PipStatusWorker
 from core.logic.python_detector import PythonDetector
-from PyQt6.QtCore import pyqtSignal  # Doplňte tento import na začiatok súboru
+from PyQt6.QtCore import pyqtSignal
+
+# --- PRIDANÝ IMPORT PRE NAŠU VLASTNÚ LIŠTU ---
+from windows.custom_message_box import CustomMessageBox
 
 class RuntimeDeleteWorker(QThread):
     """Asynchrónny robot na postupné mazanie runtimu s odosielaním priebehu."""
@@ -252,14 +255,16 @@ class PythonVerWindow(QWidget):
     def delete_selected_runtime(self):
         selected_items = self.table_runtimes.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, LanguageManager.get("title_warning", "Upozornenie"), LanguageManager.get("msg_select_version_first", "Najskôr vyberte verziu zo zoznamu."))
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(self, LanguageManager.get("title_warning", "Upozornenie"), LanguageManager.get("msg_select_version_first", "Najskôr vyberte verziu zo zoznamu."))
             return
             
         row = selected_items[0].row()
         version_name = self.table_runtimes.item(row, 0).text()
         target_path = self.table_runtimes.item(row, 1).text()
         
-        reply = QMessageBox.question(self, LanguageManager.get("title_confirm", "Potvrdenie"), LanguageManager.get("msg_confirm_delete_runtime", "Naozaj chcete natrvalo odstrániť túto položku?\n\n{0}").format(version_name), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        # --- ZMENA NA NAŠU LIŠTU ---
+        reply = CustomMessageBox.question(self, LanguageManager.get("title_confirm", "Potvrdenie"), LanguageManager.get("msg_confirm_delete_runtime", "Naozaj chcete natrvalo odstrániť túto položku?\n\n{0}").format(version_name), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
             from windows.progress_dialog import ProgressDialog
@@ -289,7 +294,8 @@ class PythonVerWindow(QWidget):
                 else:
                     error_reason = result.get("error", "Neznáma chyba")
                     self.log_output.append(f"CHYBA: {error_reason}")
-                    QMessageBox.critical(self, LanguageManager.get("title_error", "Chyba"), error_reason)
+                    # --- ZMENA NA NAŠU LIŠTU ---
+                    CustomMessageBox.critical(self, LanguageManager.get("title_error", "Chyba"), error_reason)
 
             # 3. Bezpečné medzivláknové prepojenie do GUI
             self._delete_worker.progress.connect(progress_dialog.set_progress_value, Qt.ConnectionType.QueuedConnection)

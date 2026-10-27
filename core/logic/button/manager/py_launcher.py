@@ -3,9 +3,13 @@
 #----------------------------------------
 
 import os
-from PyQt6.QtWidgets import QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QFileDialog
 from core._path import Paths
 from core.logic.language_manager import LanguageManager
+
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 
 class ScriptLauncherHandler:
     @staticmethod
@@ -18,7 +22,8 @@ class ScriptLauncherHandler:
         if not project_name:
             title = LanguageManager.get("title_error", "Chyba")
             msg = LanguageManager.get("msg_no_project_selected", "Najprv vyberte projekt.")
-            QMessageBox.warning(parent_window, title, msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(parent_window, title, msg)
             return
 
         project_path = Paths.get_project_path(core.projects_root, project_name)
@@ -26,7 +31,8 @@ class ScriptLauncherHandler:
         if not os.path.exists(project_path):
             title = LanguageManager.get("title_error", "Chyba")
             msg = LanguageManager.get("msg_project_not_found", "Priečinok projektu neexistuje.")
-            QMessageBox.warning(parent_window, title, msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(parent_window, title, msg)
             return
 
         # Preklady pre dialóg
@@ -54,7 +60,8 @@ class ScriptLauncherHandler:
         except ValueError:
             title_warn = LanguageManager.get("title_warning__selection_title", "Nedovolený výber")
             msg_warn = LanguageManager.get("msg_script_outside", "Vybraný skript sa nenachádza v aktuálnom projekte '{0}'!\n\nVyberte súbor priamo z tohto priečinka.").format(project_name)
-            QMessageBox.warning(parent_window, title_warn, msg_warn)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(parent_window, title_warn, msg_warn)
             return
 
         # Nastavíme relatívnu cestu do textového poľa

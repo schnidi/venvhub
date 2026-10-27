@@ -45,6 +45,9 @@ from core.logic.vscode_user.start_vs_code_user import VSCodeLauncher
 from core.logic.sluzby.windows_location import WindowLocation
 from core.logic.box.ide_settings import IDESettingsHandler
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 
 class MasterManager(QWidget):
     config_changed = pyqtSignal()
@@ -299,7 +302,8 @@ class MasterManager(QWidget):
         if not self.selected_venv_path:
             title = LanguageManager.get("title_error", "Chyba")
             msg = LanguageManager.get("msg_no_venv_selected_for_pip", "Nie je vybrané žiadne prostredie.")
-            QMessageBox.warning(self, title, msg)
+            # --- ZMENA: Použitie CustomMessageBox ---
+            CustomMessageBox.warning(self, title, msg)
             return
         project_root = Paths.get_project_path(self.core.projects_root, self.core.active_project)
         if self.pip_window is None:
@@ -313,12 +317,14 @@ class MasterManager(QWidget):
 
     def open_local_packages_window(self):
         if not self.selected_venv_path:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
+            # --- ZMENA: Použitie CustomMessageBox ---
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
             return
             
         local_root = getattr(self.core, 'local_packages_root', '')
         if not local_root or not os.path.exists(local_root):
-            QMessageBox.warning(self, LanguageManager.get("title_warning", "Upozornenie"), LanguageManager.get("msg_set_local_pkg_root", "Prejdite na záložku 'Nastavenia' a zvoľte platnú zložku pre 'Lokálne balíčky'."))
+            # --- ZMENA: Použitie CustomMessageBox ---
+            CustomMessageBox.warning(self, LanguageManager.get("title_warning", "Upozornenie"), LanguageManager.get("msg_set_local_pkg_root", "Prejdite na záložku 'Nastavenia' a zvoľte platnú zložku pre 'Lokálne balíčky'."))
             return
 
         if self.local_pkg_window is not None:
@@ -331,7 +337,8 @@ class MasterManager(QWidget):
 
     def open_pip_e_window(self):
         if not self.selected_venv_path:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
+            # --- ZMENA: Použitie CustomMessageBox ---
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
             return
 
         if self.pip_e_window is not None:
@@ -473,7 +480,8 @@ class MasterManager(QWidget):
         text, ok = QInputDialog.getText(self, title, label)
         if ok and text:
             if text in self.core.multi_groups:
-                QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_group_exists", "Skupina už existuje."))
+                # --- ZMENA: Použitie CustomMessageBox ---
+                CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_group_exists", "Skupina už existuje."))
                 return
             self.core.multi_groups[text] = []
             self.core.save_config()
@@ -570,7 +578,8 @@ class MasterManager(QWidget):
         cur = self.list_multi_groups.currentItem()
         if not cur: 
             if not silent:
-                QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_no_group_selected_save", "Nie je vybraná žiadna skupina na uloženie."))
+                # --- ZMENA: Použitie CustomMessageBox ---
+                CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_no_group_selected_save", "Nie je vybraná žiadna skupina na uloženie."))
             return
             
         group_name = cur.text()
@@ -597,7 +606,8 @@ class MasterManager(QWidget):
         self.config_changed.emit()
         
         if not silent:
-            QMessageBox.information(self, LanguageManager.get("title_saved", "Uložené"), LanguageManager.get("msg_group_saved", "Skupina bola uložená."))
+            # --- ZMENA: Použitie CustomMessageBox ---
+            CustomMessageBox.information(self, LanguageManager.get("title_saved", "Uložené"), LanguageManager.get("msg_group_saved", "Skupina bola uložená."))
 
     def uncheck_all_projects(self):
         it = QTreeWidgetItemIterator(self.tree_all_projects)
@@ -612,7 +622,9 @@ class MasterManager(QWidget):
         group_name = cur.text()
         title = LanguageManager.get("title_delete", "Zmazať?")
         msg = LanguageManager.get("msg_delete_group_confirm", "Zmazať skupinu {group}?").format(group=group_name)
-        if QMessageBox.question(self, title, msg) == QMessageBox.StandardButton.Yes:
+        
+        # --- ZMENA: Použitie CustomMessageBox ---
+        if CustomMessageBox.question(self, title, msg) == QMessageBox.StandardButton.Yes:
             if group_name in self.core.multi_groups:
                 del self.core.multi_groups[group_name]
                 self.core.save_config()
@@ -797,7 +809,8 @@ class MasterManager(QWidget):
         success, err_msg = VSCodeLauncher.launch(self.core, project_path, venv_path)
         
         if not success:
-            QMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), err_msg)
+            # --- ZMENA: Použitie CustomMessageBox ---
+            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), err_msg)
 
     def populate_themes_combo(self):
         self.combo_themes.blockSignals(True)
@@ -864,7 +877,8 @@ class MasterManager(QWidget):
                     "alebo preň v systéme Windows nakonfigurujte premennú PATH."
                 ).format(active_py_name)
                 
-                QMessageBox.warning(self, title, msg)
+                # --- ZMENA: Použitie CustomMessageBox ---
+                CustomMessageBox.warning(self, title, msg)
                 
                 self.combo_pkg_manager.blockSignals(True)
                 self.combo_pkg_manager.setCurrentIndex(self.combo_pkg_manager.findData("pip"))

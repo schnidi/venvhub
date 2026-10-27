@@ -356,3 +356,47 @@ QPushButton#btn_vscode[ide_type="vscode"] {
 QPushButton#btn_vscode[ide_type="cursor"] {
     qproperty-icon: url({{CORE_THEMES_DIR}}/icon/cursor/cursor_icon.svg);
 }
+
+/* ======================================================== */
+/* 1. KRÍŽIK X V LIŠTE (oprava veľkého modrého obdĺžnika)  */
+/* ======================================================== */
+QPushButton#btn_close {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 0px;
+    min-width: 45px;
+    max-width: 45px;
+    min-height: 32px;
+    max-height: 32px;
+    color: #cccccc;
+}
+
+QPushButton#btn_close:hover {
+    background-color: #e81123;  /* Klasický červený krížik pri prejdení myšou */
+    color: #ffffff;
+    border: none;
+}
+
+/* ======================================================== */
+/* 2. TLAČIDLÁ DIALÓGU (OK, Áno, Nie)                       */
+/* ======================================================== */
+#CustomMessageBox QPushButton:not(#btn_close) {
+    background-color: #333333;
+    color: #eeeeee;
+    border: 1px solid #444444;  /* Presne rovnaký rámček ako v celom QSS */
+    border-radius: 4px;
+    padding: 4px 12px;
+    min-width: 60px;
+}
+
+#CustomMessageBox QPushButton:not(#btn_close):hover {
+    background-color: #444444;
+    border-color: #007acc;
+    color: #ffffff;
+}
+
+#CustomMessageBox QPushButton:not(#btn_close):pressed {
+    background-color: #005a9e;
+    color: #ffffff;
+}

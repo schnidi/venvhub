@@ -24,6 +24,9 @@ from core.logic.commands.command_factory import PackageManagerFactory
 from core.logic.sluzby.log_print_desktop import DesktopLogger
 from core.logic.sluzby.embed_python_created import EmbedPythonCreated
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 # --- NEZÁVISLÝ PREPÍNAČ PRE LOGOVANIE (Iba pre clone.py) ---
 LOGGING_ENABLED = False
 clone_logger = DesktopLogger(is_enabled=LOGGING_ENABLED, filename="VENV_CLONE_LOG.txt")
@@ -356,7 +359,8 @@ class CloneHandler:
         if os.path.exists(target_path):
             err_title = LanguageManager.get("title_error", "Chyba")
             err_msg = LanguageManager.get("msg_venv_exists", "Prostredie '{0}' už existuje!").format(full_new_folder_name)
-            QMessageBox.warning(parent, err_title, err_msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(parent, err_title, err_msg)
             return
 
         is_embed, parent_python = CloneHandler._analyze_source(source_venv_path)
@@ -383,7 +387,8 @@ class CloneHandler:
             progress.accept()
             err_title = LanguageManager.get("clone_err_title", "Chyba klonovania")
             err_msg = LanguageManager.get("clone_err_generic", "Nastala chyba:\n{0}").format(err)
-            QMessageBox.critical(parent, err_title, err_msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.critical(parent, err_title, err_msg)
 
         CloneHandler._worker.error.connect(on_error, Qt.ConnectionType.QueuedConnection)
         

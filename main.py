@@ -13,7 +13,20 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
+# =========================================================================
+# 1. REGISTRÁCIA STATICKÝCH SLUŽIEB (Bez závislosti na GUI)
+# =========================================================================
+from core.core_states import CoreService
+from core.core_bridge import CoreBridge
+from core.logic.vscode_user.sluzby.ide_paths import IDEPaths
+
+CoreBridge.register_service(CoreService.IDE_PATHS, IDEPaths)
+
+# =========================================================================
+# 2. PROSTREDIE A LISTNERY
+# =========================================================================
 from core.logic.pyqt_to_pyside import setup_qt_environment
+# TOTO MUSÍ ZBEHNÚŤ AKO PRVÉ PRED AKÝMKOĽVEK IMPORTOM Z PYQT
 setup_qt_environment()
 
 from core.logic.system_listener import SystemListener
@@ -32,8 +45,6 @@ from core.logic.skin_manager import SkinManager
 from core.single_instance import SingleInstance, SingleInstanceError
 from core.logic.containers.logic.autostart_boot import AutostartBooter
 from core.logic.sluzby.about_logic import AboutLogic
-
-# JEDINÁ SLUŽBA PRE AKTUALIZÁCIE:
 from core.logic.sluzby.github_update import GitHubUpdate
 
 
@@ -50,7 +61,25 @@ def _start_background_update_check():
 
 
 def main():
+    # Aplikácia musí vzniknúť ako prvá!
     app = QApplication(sys.argv)
+
+    # =========================================================================
+    # 3. REGISTRÁCIA GUI SLUŽIEB & PREKLADY JADRA
+    # (AŽ TU je bezpečné importovať LanguageManager, keď je Qt prostredie ready)
+    # =========================================================================
+    from core.logic.sluzby.language.language_manager import LanguageManager
+    
+    lang_manager = LanguageManager()
+    CoreBridge.register_service(CoreService.LANGUAGE, lang_manager)
+    
+    # Prebehne kontrola zoznamu služieb a vypíše sa do konzoly
+    CoreBridge.audit_services()
+    
+    # Načítame preklady úplne na začiatku, pred tvorbou okien
+    lang_status = CoreBridge.load_language("auto")
+    print(f"[MAIN] Jazyk inicializovaný so stavom: {lang_status.value}")
+    # =========================================================================
 
     AboutLogic.register_about_dialog(AboutDialog)
 

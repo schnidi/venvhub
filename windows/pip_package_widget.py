@@ -1,3 +1,4 @@
+#----------------------------------------
 # Súbor: windows/pip_package_widget.py
 #----------------------------------------
 
@@ -11,6 +12,9 @@ from core.logic.button.pip.pip_command_worker import PipCommandWorker
 from core.logic.commands.command_factory import PackageManagerFactory
 from core.logic.sluzby.requirements_parser import RequirementsParser
 from core.logic.sluzby.apt_logic import AptLogic
+
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
 
 class PipPackageWidget(QWidget):
     def __init__(self, parent_window, venv_path):
@@ -102,7 +106,6 @@ class PipPackageWidget(QWidget):
         if hasattr(self.parent_window, "log_output"):
             self.parent_window.log_output.append(message)
 
-    # --- ZMENA: command je teraz už hotové pole [uv, pip, install...] ---
     def run_pip_command(self, full_command, start_message):
         # POISTKA (BUG-08): Ak už nejaké vlákno beží, ignoruj nové volanie
         if self.thread and self.thread.isRunning():
@@ -144,14 +147,16 @@ class PipPackageWidget(QWidget):
             self.log(msg_fail)
             title_err = LanguageManager.get("title_error", "Chyba")
             msg_err = LanguageManager.get("msg_check_log", "Operácia zlyhala. Skontrolujte log pre viac detailov.")
-            QMessageBox.warning(self, title_err, msg_err)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(self, title_err, msg_err)
         
         self.set_buttons_enabled(True)
 
     def on_command_error(self, error_message):
         self.log(f"CHYBA: {error_message}")
         title_crit = LanguageManager.get("title_critical_error", "Kritická chyba")
-        QMessageBox.critical(self, title_crit, error_message)
+        # --- ZMENA NA NAŠU LIŠTU ---
+        CustomMessageBox.critical(self, title_crit, error_message)
         self.set_buttons_enabled(True)
 
     def _get_manager_type(self):
@@ -181,8 +186,6 @@ class PipPackageWidget(QWidget):
         if os.path.exists(req_file):
             try:
                 # Prečítame súbor (vráti množinu normalizovaných názvov)
-                # OPRAVA: bez pip_e_root parser nevie správne vyriešiť -e riadky
-                # (editable balíčky) a mylne ich vynechá z parsed_reqs.
                 parsed_reqs = RequirementsParser.parse(req_file, pip_e_root=core.pip_e_packages_root)
                 # Normalizujeme názov balíčka, na ktorý sme klikli (napr. Flask -> flask)
                 normalized_pkg = AptLogic._normalize(pkg_name)
@@ -195,7 +198,6 @@ class PipPackageWidget(QWidget):
 
         title = LanguageManager.get("title_confirm", "Potvrdenie")
         
-        # Štandardný a bezpečný zápis cez LanguageManager
         if is_in_requirements:
             default_req_msg = (
                 "⚠️ UPOZORNENIE: Balíček '{0}' je explicitne definovaný v súbore requirements.txt!\n\n"
@@ -207,12 +209,10 @@ class PipPackageWidget(QWidget):
             default_msg = "Naozaj chcete odinštalovať balíček '{0}'?"
             msg = LanguageManager.get("msg_confirm_uninstall", default_msg).format(pkg_name)
         
-        # Dialógové okno s lokalizovanými tlačidlami Áno / Nie
-        msg_box = QMessageBox(QMessageBox.Icon.Question, title, msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, self)
-        msg_box.setButtonText(QMessageBox.StandardButton.Yes, LanguageManager.get("btn_yes", "Áno"))
-        msg_box.setButtonText(QMessageBox.StandardButton.No, LanguageManager.get("btn_no", "Nie"))
+        # --- ZMENA NA NAŠU LIŠTU! Toto presne opraví tie obrázky, ktoré si poslal ---
+        reply = CustomMessageBox.question(self, title, msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
-        if msg_box.exec() == QMessageBox.StandardButton.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             dispatcher = PackageManagerFactory.get_dispatcher(self._get_manager_type(), self.venv_path)
             full_cmd = dispatcher.get("uninstall", package_name=pkg_name)
             
@@ -227,7 +227,8 @@ class PipPackageWidget(QWidget):
         if not version:
             title = LanguageManager.get("title_error", "Chyba")
             msg = LanguageManager.get("msg_enter_version", "Zadajte verziu (napr. 1.2.3)")
-            QMessageBox.warning(self, title, msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(self, title, msg)
             return
             
         dispatcher = PackageManagerFactory.get_dispatcher(self._get_manager_type(), self.venv_path)
@@ -237,4 +238,3 @@ class PipPackageWidget(QWidget):
         msg_start = LanguageManager.get("msg_installing_spec", "\n--- Inštalujem {0} ---").format(package_spec)
         self.run_pip_command(full_cmd, msg_start)
         self.edit_specific_version.clear()
-

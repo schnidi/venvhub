@@ -7,6 +7,10 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from core.logic.language_manager import LanguageManager
 from core._path import Paths
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
+
 class MetadataHandler:
     """
     Logika pre výber cieľového priečinka pre "Rodný list" aplikácie.
@@ -51,7 +55,8 @@ class MetadataHandler:
             window.edit_birth_cert_path.setText(final_path)
 
         except ValueError:
-            QMessageBox.warning(
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(
                 window,
                 LanguageManager.get("title_outside_project_error", "Chyba - Mimo projektu!"),
                 LanguageManager.get("msg_folder_outside_project", "Vybraný priečinok sa nenachádza v aktuálnom projekte '{0}'.\n\nProsím, vyberte alebo vytvorte priečinok priamo v štruktúre projektu.").format(project_name)

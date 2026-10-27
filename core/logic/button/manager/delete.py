@@ -14,6 +14,9 @@ from core.logic.vs_code_json import VSCodeIntegration
 from core.logic.sluzby.copy_del import CopyDelService
 from windows.progress_dialog import ProgressDialog
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 
 class DeleteWorker(QThread):
     progress = pyqtSignal(int)
@@ -41,7 +44,8 @@ class DeleteHandler:
         title = LanguageManager.get("title_delete", "Zmazať?")
         msg = LanguageManager.get("msg_confirm_delete", "Naozaj chcete úplne vymazať venv:\n{0}?").format(name)
         
-        confirm = QMessageBox.question(
+        # --- ZMENA NA NAŠU LIŠTU ---
+        confirm = CustomMessageBox.question(
             parent_window, 
             title, 
             msg,
@@ -78,7 +82,8 @@ class DeleteHandler:
                     title_err = LanguageManager.get("title_error", "Chyba")
                     error_reason = result.get("error", "Neznáma chyba")
                     msg_err = LanguageManager.get("msg_delete_failed", "Nepodarilo sa zmazať: {0}").format(error_reason)
-                    QMessageBox.critical(parent_window, title_err, msg_err)
+                    # --- ZMENA NA NAŠU LIŠTU ---
+                    CustomMessageBox.critical(parent_window, title_err, msg_err)
 
             # 3. Prepojíme signály z vlákna s naším oknom (percentá aj text)
             parent_window._delete_worker.progress.connect(progress_dialog.set_progress_value)

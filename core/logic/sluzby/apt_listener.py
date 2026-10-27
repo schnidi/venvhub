@@ -13,16 +13,24 @@ from core.logic.language_manager import LanguageManager
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
+
 class AptListener:
     """
     Systémový Interceptor (poslucháč na pozadí).
 
-    Zachytáva manuálne príkazy používateľa (napr. 'pip install requests[socks]'):
-      1. Pred inštaláciou skontroluje, či balíček už nie je 1:1 prítomný z requirements.txt.
-         Ak áno, zastaví zbytočnú inštaláciu a zabráni duplicitnému zápisu do JSON.
-      2. Pred odinštalovaním vykonáva ŽIVÚ KONTROLU cez AptLogic.verify_uninstall_safety.
-      3. Po úspešnom odinštalovaní vyhladí balíček zo stavu cez AptLogic.scrub_package_completely
-         a spustí čisté autoremove.
+    Sleduje a riadi všetky operácie s balíčkami naprieč celou aplikáciou:
+      1. KONTROLA STAVU 1:1 PRED INŠTALÁCIOU:
+         - Pred spustením 'pip/uv install' skontroluje, či balíček (aj s jeho [extras])
+           už nie je zadeklarovaný v requirements.txt a nainštalovaný vo venv.
+         - Ak áno, zbytočný subprocess sa preskočí a do JSONu sa nezapíše duplicita.
+      2. ŽIVÁ KONTROLA PRED ODINŠTALÁCIOU (verify_uninstall_safety):
+         - Zablokuje odinštalovanie, ak je balíček tvrdou závislosťou iného balíčka,
+           ak je v requirements.txt, alebo ak ho vyžaduje lokálny Linker modul (5. stav).
+      3. VYHLADENIE A AUTOREMOVE (scrub_package_completely):
+         - Po úspešnom odinštalovaní vymaže referencie a spustí autoremove sirôt.
+      4. INTEGRÁCIA S 5. STAVOM (LINKER):
+         - Rešpektuje väzby v 'linker_packages_bound'. Chráni balíčky potrebné pre lokálne moduly.
+         - Zápis linker stavu rieši LocalPackagesLinker._sync_apt_linker_state (listener ho nepatchuje).
     """
 
     @staticmethod
@@ -34,17 +42,23 @@ class AptListener:
 
     @staticmethod
     def start_listening(core):
-        """Zaregistruje všetky odchytávacie hooky pre celú aplikáciu."""
+        """
+        Zaregistruje všetky odchytávacie hooky pre celú aplikáciu pri štarte (main.py).
+        
+        Args:
+            core: Inštancia hlavného jadra ProjectCore.
+        """
         AptListener._patch_pip_manager(core)
         AptListener._patch_pip_package_widget(core)
         AptListener._patch_pip_worker_all_update(core)
         AptListener._patch_pipe_install(core)
         AptListener._patch_pipe_uninstall(core)
-        AptListener._patch_local_linker(core)
 
     @staticmethod
     def _get_worker_cmd(worker) -> list[str] | None:
-        """Unifikovane vytiahne zoznam argumentov príkazu z ľubovoľného workera."""
+        """
+        Unifikovane vytiahne zoznam argumentov príkazu z ľubovoľného workera.
+        """
         if hasattr(worker, 'full_command') and worker.full_command:
             return worker.full_command
         if hasattr(worker, 'cmd') and worker.cmd:
@@ -60,15 +74,19 @@ class AptListener:
         """
         Zverí extrakciu mena balíčka nášmu RequirementsParseru (podporuje URL, tarbally, verzie).
         Iba vytiahne voliteľný zoznam [extras], ak sa v argumente nachádza.
+
+        Args:
+            arg (str): Argument z príkazového riadka (napr. 'requests[socks]>=2.25.0').
+
+        Returns:
+            tuple[str | None, list[str]]: (normalizovaný_názov, [zoznam_extras]).
         """
-        # 1. Čisté meno balíčka vyrieši centrálny parser
         clean_pkg = RequirementsParser._extract_package_name(arg)
         if not clean_pkg:
             return None, []
 
         norm_name = AptLogic._normalize(clean_pkg)
 
-        # 2. Ak argument obsahoval aj [extra1,extra2], vytiahneme ich
         extras = []
         extras_match = re.search(r"\[([^\]]+)\]", arg)
         if extras_match:
@@ -81,7 +99,7 @@ class AptListener:
     def _extract_packages_from_install_cmd(cmd_list: list[str]) -> list[tuple[str, list[str]]]:
         """
         Prejde argumenty príkazu install, preskočí prepínače CLI inštalátora
-        a každý cieľ pošle priamo nášmu parseru.
+        a každý inštalačný cieľ pošle na extrakciu.
         """
         items = []
         cmd_lower = [str(x).lower() for x in cmd_list]
@@ -101,15 +119,16 @@ class AptListener:
                         skip_next = True
                     continue
 
-                # Všetko ostatné (mená, verzie, tar.gz, URL) spracuje priamo parser
                 pkg_name, extras = AptListener._extract_package_and_extras_from_arg(arg_str)
                 if pkg_name and pkg_name not in AptLogic.CORE_TOOLS:
                     items.append((pkg_name, extras))
         return items
 
     @staticmethod
-    def _extract_packages_from_uninstall_cmd(cmd_list: list[str]) -> list[str]:
-        """Prejde argumenty príkazu uninstall a mená vytiahne priamo cez parser."""
+    def _extract_packages_from_uninstall_cmd(cmd_list: list[str], include_core: bool = False) -> list[str]:
+        """
+        Prejde argumenty príkazu uninstall a vytiahne normalizované mená odinštalovávaných balíčkov.
+        """
         pkgs = []
         cmd_lower = [str(x).lower() for x in cmd_list]
         if "uninstall" in cmd_lower:
@@ -130,7 +149,7 @@ class AptListener:
                 clean_pkg = RequirementsParser._extract_package_name(arg_str)
                 if clean_pkg:
                     norm_name = AptLogic._normalize(clean_pkg)
-                    if norm_name not in AptLogic.CORE_TOOLS:
+                    if include_core or norm_name not in AptLogic.CORE_TOOLS:
                         pkgs.append(norm_name)
         return pkgs
 
@@ -140,6 +159,9 @@ class AptListener:
 
     @staticmethod
     def _patch_pip_manager(core):
+        """
+        Obalí PipManager._run_pip_task ochrannými a synchronizačnými kontrolami AptLogic.
+        """
         from core.logic.pip_manager import PipManager
         orig_run_pip_task = PipManager._run_pip_task
 
@@ -155,9 +177,9 @@ class AptListener:
                 is_req_install = "install" in cmd_lower and "-r" in cmd_lower
                 is_version_change = any("==" in str(arg) or "<" in str(arg) or ">" in str(arg) for arg in cmd_list)
 
-                # ŽIVÁ APT KONTROLA pred povolením odinštalácie
+                # ŽIVÁ APT KONTROLA pred povolením odinštalácie (zahŕňa aj 5. stav Linkera)
                 if is_uninstall:
-                    pkgs_to_uninstall = AptListener._extract_packages_from_uninstall_cmd(cmd_list)
+                    pkgs_to_uninstall = AptListener._extract_packages_from_uninstall_cmd(cmd_list, include_core=True)
                     for pkg in pkgs_to_uninstall:
                         is_safe, err_msg = AptLogic.verify_uninstall_safety(worker.venv_path, core, pkg)
                         if not is_safe:
@@ -228,7 +250,7 @@ class AptListener:
                             if extras:
                                 AptLogic.resolve_and_bind_extras(worker.venv_path, pkg, extras, context="explicit")
 
-                    # 3. Synchronizácia požiadaviek
+                    # 3. Synchronizácia požiadaviek requirements.txt
                     if is_req_install:
                         actual_req_path = None
                         if cmd_list:
@@ -259,6 +281,9 @@ class AptListener:
 
     @staticmethod
     def _patch_pip_package_widget(core):
+        """
+        Obalí PipPackageWidget.run_pip_command kontrolami pred a po vykonaní príkazu v GUI.
+        """
         from windows.pip_package_widget import PipPackageWidget
         orig_run_pip_command = PipPackageWidget.run_pip_command
 
@@ -269,9 +294,9 @@ class AptListener:
             is_upgrade = "install" in cmd_lower and ("--upgrade" in full_command or "-U" in full_command)
             is_version_change = any("==" in str(arg) or "<" in str(arg) or ">" in str(arg) for arg in full_command)
 
-            # ŽIVÁ APT KONTROLA pred odinštaláciou v GUI
+            # ŽIVÁ APT KONTROLA pred odinštaláciou v GUI (vrátane Linker ochrany)
             if is_uninstall:
-                pkgs_to_uninstall = AptListener._extract_packages_from_uninstall_cmd(full_command)
+                pkgs_to_uninstall = AptListener._extract_packages_from_uninstall_cmd(full_command, include_core=True)
                 for pkg in pkgs_to_uninstall:
                     is_safe, err_msg = AptLogic.verify_uninstall_safety(self.venv_path, core, pkg)
                     if not is_safe:
@@ -337,6 +362,7 @@ class AptListener:
 
     @staticmethod
     def _patch_pip_worker_all_update(core):
+        """Rezerva pre prípadné rozšírenie sledovania hromadnej aktualizácie."""
         pass
 
     # =========================================================================
@@ -345,6 +371,7 @@ class AptListener:
 
     @staticmethod
     def _patch_pipe_install(core):
+        """Zaregistruje hook po úspešnom 'pip install -e'."""
         from core.logic import pip_e
 
         def after_install(worker):
@@ -357,6 +384,7 @@ class AptListener:
 
     @staticmethod
     def _patch_pipe_uninstall(core):
+        """Zaregistruje bezpečnostné hooky pred a po 'pip uninstall' pre editovateľné balíčky."""
         from core.logic import pip_e
 
         def before_uninstall(worker):
@@ -374,38 +402,3 @@ class AptListener:
 
         pip_e.HOOKS["uninstall_pre"] = before_uninstall
         pip_e.HOOKS["uninstall_success"] = after_uninstall
-
-    # =========================================================================
-    # --- PATCH PRE LOKÁLNY LINKER ---
-    # =========================================================================
-
-    @staticmethod
-    def _patch_local_linker(core):
-        from core.logic.button.manager.local_packages_linker import LocalPackagesLinker
-        orig_apply_changes = LocalPackagesLinker.apply_changes
-
-        def patched_apply_changes(self, selected_items_data):
-            effective_core = getattr(self, "core", core)
-            old_linked = self.parent._get_linked_packages()
-            new_linked = set(item['name'] for item in selected_items_data)
-
-            released_reqs = []
-            for old_pkg in old_linked:
-                if old_pkg not in new_linked:
-                    pkg_path = os.path.join(effective_core.local_packages_root, old_pkg)
-                    meta_path = os.path.join(pkg_path, "local_meta.json")
-                    if os.path.exists(meta_path):
-                        try:
-                            with open(meta_path, 'r', encoding='utf-8') as f:
-                                meta = json.load(f)
-                                released_reqs.extend(meta.get("requires_pip", []))
-                        except Exception:
-                            pass
-
-            result = orig_apply_changes(self, selected_items_data)
-            if result and released_reqs:
-                AptLogic.autoremove(effective_core, self.venv_path, self.log_callback, released_packages=released_reqs)
-
-            return result
-
-        LocalPackagesLinker.apply_changes = patched_apply_changes

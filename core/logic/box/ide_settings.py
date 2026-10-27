@@ -10,6 +10,9 @@ from core._path import Paths
 from core.logic.language_manager import LanguageManager
 from core.logic.ide_detector import IDEDetector
 
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
 
 class _IDESignals(QObject):
     """
@@ -260,7 +263,8 @@ class IDESettingsHandler:
                 break
 
         if not found_executable:
-            QMessageBox.warning(
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(
                 parent_window,
                 LanguageManager.get("title_warning", "Upozornenie"),
                 LanguageManager.get(

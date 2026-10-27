@@ -2,8 +2,11 @@
 # Súbor: core/logic/containers/button/add_new_group.py
 #----------------------------------------
 
-from PyQt6.QtWidgets import QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QInputDialog
 from core.logic.language_manager import LanguageManager
+
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
 
 class AddNewGroupHandler:
     """
@@ -32,7 +35,8 @@ class AddNewGroupHandler:
 
         # 4. Ak už nie je čo pridať, zobrazíme správu
         if not selectable_groups:
-            QMessageBox.information(
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.information(
                 autostart_window,
                 LanguageManager.get("add_group_msg_title", "Všetko pridané"),
                 LanguageManager.get("add_group_msg_text", "Všetky dostupné skupiny z 'Hromadného spúšťania' sú už v zozname.")

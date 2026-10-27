@@ -3,13 +3,15 @@
 #----------------------------------------
 
 import os
-from PyQt6.QtWidgets import QMessageBox
 from core.logic.language_manager import LanguageManager
 from core.logic.button.manager.actions import ActionHandler
 from core.logic.containers.logic.check_multi_venv import MultiVenvChecker
 from core._path import Paths
 
-# --- NOVÝ IMPORT PRE VS CODE ---
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
+
+# --- IMPORT PRE VS CODE ---
 from core.logic.vscode_user.start_vs_code_user import VSCodeLauncher
 
 class WidgetDispatcher:
@@ -26,7 +28,12 @@ class WidgetDispatcher:
         core = parent_widget.core
         
         if core.app_mode == 'multi':
-            QMessageBox.information(parent_widget, LanguageManager.get("title_info", "Info"), LanguageManager.get("msg_vscode_single_only", "Otváranie VS Code je dostupné len v režime Single."))
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.information(
+                parent_widget, 
+                LanguageManager.get("title_info", "Info"), 
+                LanguageManager.get("msg_vscode_single_only", "Otváranie VS Code je dostupné len v režime Single.")
+            )
             return
             
         # Zozbierame chyby (rovnako ako pri Play)
@@ -50,7 +57,8 @@ class WidgetDispatcher:
             title = LanguageManager.get("err_cannot_start_title", "Nie je možné spustiť")
             intro = LanguageManager.get("err_intro_problems_found", "Vyskytli sa nasledujúce problémy:")
             full_message = f"{intro}\n\n" + "\n".join(error_messages)
-            QMessageBox.warning(parent_widget, title, full_message)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(parent_widget, title, full_message)
             return
 
         # Všetko je OK, spúšťame existujúcu logiku VS Code
@@ -58,7 +66,12 @@ class WidgetDispatcher:
         success, err_msg = VSCodeLauncher.launch(core, project_path, core.active_venv_path)
         
         if not success:
-            QMessageBox.warning(parent_widget, LanguageManager.get("title_vscode_launch_error", "Chyba pri spúšťaní VS Code"), err_msg)
+            # --- ZMENA NA NAŠU LIŠTU ---
+            CustomMessageBox.warning(
+                parent_widget, 
+                LanguageManager.get("title_vscode_launch_error", "Chyba pri spúšťaní VS Code"), 
+                err_msg
+            )
 
     @staticmethod
     def handle_play(parent_widget):
@@ -80,7 +93,12 @@ class WidgetDispatcher:
                     "Nie je možné spustiť skupinu '{0}', pretože nasledujúce prostredia už bežia:\n\n{1}\n\nNajprv ich zastavte."
                 )
                 msg = msg_template.format(active_group, "\n".join(f"- {c}" for c in conflicts))
-                QMessageBox.warning(parent_widget, LanguageManager.get("title_venv_conflict", "Konflikt prostredí"), msg)
+                # --- ZMENA NA NAŠU LIŠTU ---
+                CustomMessageBox.warning(
+                    parent_widget, 
+                    LanguageManager.get("title_venv_conflict", "Konflikt prostredí"), 
+                    msg
+                )
                 return
             
             from core.logic.containers.button.autostart_actions import AutostartActionHandler
@@ -119,7 +137,8 @@ class WidgetDispatcher:
                 title = LanguageManager.get("err_cannot_start_title", "Nie je možné spustiť")
                 intro = LanguageManager.get("err_intro_problems_found", "Vyskytli sa nasledujúce problémy:")
                 full_message = f"{intro}\n\n" + "\n".join(error_messages)
-                QMessageBox.warning(parent_widget, title, full_message)
+                # --- ZMENA NA NAŠU LIŠTU ---
+                CustomMessageBox.warning(parent_widget, title, full_message)
                 return
 
             if core.run_mode == "run_in_terminal":

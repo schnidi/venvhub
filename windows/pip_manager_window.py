@@ -16,6 +16,8 @@ from core.logic.button.pip.pip_worker_allupdate import PipWorkerAllUpdate
 from core.logic.language_manager import LanguageManager
 
 from windows.custom_title_bar import CustomTitleBar
+# --- PRIDANÝ IMPORT NAŠHO VLASTNÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox 
 
 
 class FreezeWorker(QThread):
@@ -212,7 +214,10 @@ class PipManagerWindow(QDialog):
         self.table_packages.setRowCount(0)
         self.log_output.append(f"CHYBA: {error_message}")
         title = LanguageManager.get("title_error_loading", "Chyba pri načítavaní")
-        QMessageBox.critical(self, title, error_message)
+        
+        # --- ZMENA: POUŽITIE NÁŠHO VLASTNÉHO OKNA MIESTO KLASICKÉHO WINDOWS OKNA ---
+        CustomMessageBox.critical(self, title, error_message)
+        
         self.set_buttons_enabled(True)
 
     def set_buttons_enabled(self, enabled: bool):

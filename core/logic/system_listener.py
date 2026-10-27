@@ -8,9 +8,12 @@ import socket
 import re
 import threading
 from datetime import datetime
-from PyQt6.QtWidgets import QMessageBox
+
 from core._path import Paths
 from core.logic.language_manager import LanguageManager
+
+# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.custom_message_box import CustomMessageBox
 
 
 def normalize_venv_name(path_or_name):
@@ -196,11 +199,7 @@ def verify_access(venv_path):
 
 
 def show_blocked_warning(venv_name=""):
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Icon.Critical)
-    
     title = LanguageManager.get("portability_protection_title", "Ochrana prenosnosti: Prístup zablokovaný")
-    msg.setWindowTitle(title)
     
     default_text = (
         f"Prostredie '{venv_name}' bolo vytvorené pomocou Systémového Pythonu na INOM počítači!\n\n"
@@ -216,8 +215,8 @@ def show_blocked_warning(venv_name=""):
     except Exception:
         formatted_text = raw_text
         
-    msg.setText(formatted_text)
-    msg.exec()
+    # --- ZMENA NA NAŠU LIŠTU ---
+    CustomMessageBox.critical(None, title, formatted_text)
 
 
 # =====================================================================

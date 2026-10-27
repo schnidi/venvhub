@@ -6,7 +6,7 @@ import re
 import threading
 import requests
 from core.logic.sluzby.about_logic import AboutLogic
-from core.logic.language_manager import LanguageManager
+from core.core_bridge import CoreBridge
 
 
 class GitHubUpdate:
@@ -33,12 +33,33 @@ class GitHubUpdate:
 
     @staticmethod
     def _parse_version(version_str: str) -> tuple[int, ...]:
-        """Prevedie 'v2.5.28' alebo '2.5.28' na čísla (2, 5, 28) pre sémantické porovnanie."""
+        """
+        Prevedie verziu na porovnateľný tuple s ohľadom na DEV štádium:
+        - 2.6.01.01       (stable) -> (2, 6, 1, 1, 1)
+        - 2.6.01_01_dev   (dev)    -> (2, 6, 1, 1, 0)
+        Vďaka tomu je oficiálny release 2.6.01.01 VŽDY väčší ako jeho dev predchodca!
+        """
         if not version_str:
             return (0,)
-        clean = str(version_str).strip().lstrip("vV")
-        numbers = re.findall(r"\d+", clean)
-        return tuple(int(n) for n in numbers) if numbers else (0,)
+            
+        clean = str(version_str).strip().lstrip("vV").lower()
+        is_dev = "dev" in clean or "alpha" in clean or "beta" in clean or "rc" in clean
+        
+        # Vytiahneme len čisté čísla verzie pred slovom 'dev'
+        version_part = clean.split("dev")[0]
+        numbers = [int(n) for n in re.findall(r"\d+", version_part)]
+        
+        if not numbers:
+            return (0,)
+            
+        # Zjednotíme dĺžku na 4 pozície (Major, Minor, Patch, Hotfix)
+        while len(numbers) < 4:
+            numbers.append(0)
+            
+        # Na koniec pridáme váhu: 0 pre DEV, 1 pre STABLE
+        numbers.append(0 if is_dev else 1)
+        
+        return tuple(numbers)
 
     @classmethod
     def check_for_updates(cls, force_refresh: bool = False) -> bool:
@@ -107,7 +128,7 @@ class GitHubUpdate:
     @classmethod
     def get_download_url(cls) -> str:
         """Vráti webový odkaz lokalizovaný podľa jazyka aplikácie."""
-        raw_lang = getattr(LanguageManager, "_current_lang_code", "en_US")
+        raw_lang = CoreBridge.get_current_language()
         short_lang = str(raw_lang).split("_")[0].lower().strip()
 
         if short_lang in cls.SUPPORTED_WEB_LANGS:
