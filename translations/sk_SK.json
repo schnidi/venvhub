@@ -20,7 +20,6 @@
     "btn_import_theme": "Importovať tému...",
     "btn_install": "🛠 INŠTALOVAŤ",
     "btn_pin_tooltip": "Stále navrchu",
-    "btn_repair": "✅ Repair PIP",
     "btn_save_group": "Uložiť zmeny v skupine",
     "btn_toggle_mode_tooltip": "Prepnúť režim Single/Multi",
     "btn_update_fmt": "⬆️ Aktualizovať na {0}",
@@ -446,7 +445,6 @@
     "vscode_sync_err_no_local_root": "❌ CHYBA: local_packages_root je prázdny",
     "vscode_sync_err_no_project": "❌ CHYBA: project_path je prázdny",
     "vscode_sync_err_project_missing": "❌ CHYBA: project_path neexistuje: {path}",
-    "vscode_sync_err_read": "       ❌ Chyba pri čítaní {path}: {error}",
     "vscode_sync_found_items": "     Nájdených {tasks} úloh a {keys} skratiek.",
     "vscode_sync_keys_exist": "ℹ️ keybindings.json už existuje, obsahuje {count} skratiek.",
     "vscode_sync_keys_new": "ℹ️ keybindings.json neexistuje, vytvorím nový.",
@@ -883,7 +881,40 @@
 
     "apt_install_already_in_req_extras": "ℹ️ Balíček '{0}' je už zabezpečený cez requirements.txt (ako extra pre '{1}') a nainštalovaný. Inštalácia nie je potrebná.",
     "apt_linker_module_tag": "{mod} (Lokálny modul)",
-    "apt_err_state_save_failed": "Zápis venvhub_apt_state.json zlyhal."
+    "apt_err_state_save_failed": "Zápis venvhub_apt_state.json zlyhal.",
+
+    "apt_requirements_sync_start": "\n--- Inicializujem požiadavky z requirements.txt (APT) ---",
+    "apt_requirements_sync_fail": "⚠️ Synchronizácia požiadaviek nebola úspešná.",
+    "err_ide_not_found": "Editor {0} sa nenašiel v systéme ani na prenosnom disku.",
+    "msg_uv_missing_for_active": "Nástroj 'uv' nebol pre aktívny Python ({0}) nájdený.\n\nAk chcete využívať inštalátor UV, nainštalujte ho najprv do vášho aktívneho prostredia,\nalebo preň v systéme Windows nakonfigurujte premennú PATH.",
+
+    "apt_checking_deps": "--- Vykonávam {0} kontrolu závislostí... ---",
+    "apt_deps_compatible": "✅ Všetky závislosti sú kompatibilné.",
+    "apt_deps_conflicts": "⚠️ [{0} Check] Zistené nezrovnalosti v závislostiach:\n{1}",
+
+    "apt_install_already_present_env": "ℹ️ Balíček '{0}' je už v tomto prostredí nainštalovaný. Inštalácia nie je potrebná.",
+    "clone_install_build_tools": "🛠 Zabezpečujem build nástroje (setuptools, wheel)...",
+    "clone_editable_pkgs": "Inštalujem editovateľné balíčky (pip -e)...",
+    "clone_done_success": "✅ Klonovanie úspešne dokončené!",
+    "pipe_log_build_tools": "🛠 [PIP] Zabezpečujem build nástroje (setuptools, wheel)...",
+    "pipe_log_build_tools_failed": "⚠️ Príprava build nástrojov zlyhala, pokračujem ďalej...",
+    "pip_e_ext_installed": "ℹ️ Všetky externé PIP závislosti sú už vo venv nainštalované.",
+
+    "update_apt_start": "\n🔄 [APT UPDATE] Inicializujem inteligentnú aktualizáciu...",
+    "update_step1": "📦 Krok 1: Aktualizácia balíčkovacieho jadra...",
+    "update_step2": "🔍 Krok 2: Hľadám zastarané balíčky na webe...",
+    "update_step3": "🧠 Krok 3: Aplikujem APT pravidlá a reštrikcie...",
+    "update_step4": "🚀 Krok 4: Sťahujem a aktualizujem {0} povolených balíčkov: {1}",
+    "update_step5": "\n🧹 Krok 5: Odovzdávam riadenie APT jadru (Diff, Autoremove a Integrálny Check)...",
+    "update_all_latest": "✅ Všetky balíčky sú momentálne na najnovších verziách.",
+    "update_err_download": "❌ Chyba počas sťahovania aktualizácií.",
+    "update_all_protected": "ℹ️ Všetky zastarané balíčky sú chránené APT pravidlami. Sťahovanie preskočené.",
+    "update_protect_req": "   🛡️ Ochrana: Preskakujem '{0}' (Verzia je pevne limitovaná v requirements.txt: {1})",
+    "update_protect_linker": "   🔗 Ochrana: Preskakujem '{0}' (Spravované lokálnym Linker vývojovým modulom)",
+    "update_protect_pipe": "   ✏️ Ochrana: Preskakujem '{0}' (Lokálny editovateľný balíček pip -e)",
+    "msg_start_update_all": "\n--- Inicializujem hromadnú aktualizáciu ---",
+    "msg_start_freeze": "\n--- Spúšťam asynchrónny export (Freeze) ---",
+    "err_core_missing": "❌ KRITICKÁ CHYBA: Chýba objekt 'core'. Aktualizácia prerušená."
     
 
 }

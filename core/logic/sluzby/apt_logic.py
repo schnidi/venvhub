@@ -413,7 +413,7 @@ class AptLogic:
     # =========================================================================
 
     @staticmethod
-    def check_install_necessity(venv_path: str, core, installed_items: list[tuple[str, list[str]]], log_callback=None) -> tuple[bool, str]:
+    def check_install_necessity(venv_path: str, core, installed_items: list, log_callback=None) -> tuple[bool, str]:
         """
         KONTROLA PRED INŠTALÁCIOU (STAV 1:1 a OCHRANA PRED DUPLICITAMI).
         Overuje, či požadovaný balíček už nie je plne prítomný a zadeklarovaný v requirements.txt.
@@ -437,68 +437,64 @@ class AptLogic:
                 QApplication.processEvents()
 
         with AptLogic._get_venv_lock(venv_path):
-            _log(AptLogic._tr("apt_check_reading_reqs", "  📄 Čítam evidenciu požiadaviek (requirements.txt)..."))
             state_data = AptLogic._load_state_data(venv_path)
             req_cache = set(state_data.get("requirements_cache", []))
             req_bounds = state_data.get("requirements_extras_bound", {})
             
-            site_pkgs = AptLogic._get_site_packages_dir(venv_path)
-            installed_on_disk = set()
-            if os.path.exists(site_pkgs):
-                try:
-                    for entry in os.listdir(site_pkgs):
-                        if entry.lower().endswith(".dist-info"):
-                            installed_on_disk.add(AptLogic._normalize(entry.split("-")[0]))
-                except Exception:
-                    pass
+            # 1. Zistíme reálne nainštalované verzie z disku (napr. {'colorama': '0.4.6'})
+            installed_versions = AptLogic._collect_installed_versions(venv_path)
 
             all_skipped = True
             skip_messages = []
 
-            for pkg_name, requested_extras in installed_items:
-                norm_pkg = AptLogic._normalize(pkg_name)
-                is_in_reqs = norm_pkg in req_cache
-                is_installed = norm_pkg in installed_on_disk
+            for item in installed_items:
+                # Ošetrenie či prišla dvojica alebo trojica
+                if len(item) == 3:
+                    norm_pkg, raw_spec, requested_extras = item
+                else:
+                    norm_pkg, requested_extras = item
+                    raw_spec = norm_pkg
 
-                # Zistíme, či balíček nie je naviazaný ako extra k niektorému balíku z requirements
-                req_parent_extra = None
-                if not is_in_reqs:
-                    for parent, kids in req_bounds.items():
-                        if norm_pkg in kids:
-                            req_parent_extra = parent
-                            break
+                norm_pkg = AptLogic._normalize(norm_pkg)
+                installed_ver = installed_versions.get(norm_pkg)
+                is_installed = installed_ver is not None
 
                 _log(AptLogic._tr("apt_check_analyzing_pkg", "  🔬 Analyzujem stav balíčka '{pkg}'...", pkg=norm_pkg))
 
-                if is_in_reqs and is_installed:
-                    covered_kids = set(req_bounds.get(norm_pkg, []))
-                    extras_map = AptLogic.get_extras_map_from_metadata(venv_path, norm_pkg)
-                    
-                    uncovered_kids = []
-                    for extra in requested_extras:
-                        for kid in extras_map.get(AptLogic._normalize(extra), []):
-                            if kid not in covered_kids or kid not in installed_on_disk:
-                                uncovered_kids.append(kid)
-
-                    if not uncovered_kids:
-                        extras_str = f"[{','.join(requested_extras)}]" if requested_extras else ""
-                        msg = AptLogic._tr(
-                            "apt_install_already_1to1",
-                            "ℹ️ Balíček '{0}{1}' je už definovaný v requirements.txt a nainštalovaný. Inštalácia nie je potrebná.",
-                            norm_pkg, extras_str
-                        )
-                        skip_messages.append(msg)
-                    else:
-                        all_skipped = False
-                elif req_parent_extra and is_installed and not requested_extras:
-                    msg = AptLogic._tr(
-                        "apt_install_already_in_req_extras",
-                        "ℹ️ Balíček '{0}' je už zabezpečený cez requirements.txt (ako extra pre '{1}') a nainštalovaný. Inštalácia nie je potrebná.",
-                        norm_pkg, req_parent_extra
-                    )
-                    skip_messages.append(msg)
-                else:
+                if not is_installed:
+                    # Balíček na disku vôbec nie je -> MUSÍ SA NAINŠTALOVAŤ
                     all_skipped = False
+                    continue
+
+                # 2. OVERENIE VERZIE: Ak používateľ zadal napr. colorama==0.4.5 a na disku je 0.4.6
+                if not RequirementsParser.is_satisfied(raw_spec, installed_ver):
+                    _log(f"  ⚡ Zistená zmena verzie pre '{norm_pkg}': na disku je {installed_ver}, požadovaná je {raw_spec}. Spúšťam inštaláciu.")
+                    all_skipped = False
+                    continue
+
+                # 3. OVERENIE EXTRAS: Ak používateľ pýta napr. requests[socks]
+                extras_map = AptLogic.get_extras_map_from_metadata(venv_path, norm_pkg)
+                covered_kids = set(req_bounds.get(norm_pkg, [])) | set(state_data.get("explicit_extras_bound", {}).get(norm_pkg, []))
+                installed_pkgs_set = set(installed_versions.keys())
+                
+                uncovered_kids = [
+                    kid for extra in requested_extras
+                    for kid in extras_map.get(AptLogic._normalize(extra), [])
+                    if kid not in covered_kids or kid not in installed_pkgs_set
+                ]
+
+                if uncovered_kids:
+                    # Chýbajú niektoré extras pod-balíčky -> MUSÍ SA NAINŠTALOVAŤ
+                    all_skipped = False
+                    continue
+
+                # 4. AK SME TU: Názov sedí, verzia na disku presne vyhovuje a extras sú kompletné!
+                # Zabezpečíme zápis do explicit (ak nie je v requirements)
+                if norm_pkg not in req_cache:
+                    AptLogic.mark_as_explicit(venv_path, norm_pkg)
+
+                msg = f"ℹ️ Balíček '{norm_pkg}=={installed_ver}' je už v tomto prostredí nainštalovaný a spĺňa požiadavku ({raw_spec}). Inštalácia nie je potrebná."
+                skip_messages.append(msg)
 
             if all_skipped and installed_items:
                 return True, "\n".join(skip_messages)
@@ -1385,6 +1381,66 @@ class AptLogic:
         return extras_map
 
     # =========================================================================
+    # --- ČÍTANIE A OVEROVANIE VERZIÍ BALÍČKOV NA DISKU ---
+    # =========================================================================
+
+    @staticmethod
+    def _collect_installed_versions(venv_path: str) -> dict[str, str]:
+        """
+        Zistí a vráti slovník všetkých reálne nainštalovaných balíčkov a ich presných verzií z dist-info.
+        
+        Args:
+            venv_path (str): Absolútna cesta k virtuálnemu prostrediu.
+
+        Returns:
+            dict[str, str]: Mapovanie { normalizovaný_názov: verzia_na_disku } (napr. {'colorama': '0.4.6'}).
+        """
+        versions = {}
+        site_pkgs = AptLogic._get_site_packages_dir(venv_path)
+        if not os.path.exists(site_pkgs):
+            return versions
+        try:
+            for entry in os.listdir(site_pkgs):
+                if entry.lower().endswith(".dist-info"):
+                    stem = entry[:-len(".dist-info")]
+                    name, _, version = stem.partition("-")
+                    if name:
+                        versions[AptLogic._normalize(name)] = version
+        except Exception:
+            pass
+        return versions
+
+    @staticmethod
+    def _version_satisfied(spec_string: str, installed_version: str) -> bool:
+        """
+        Overí, či verzia balíčka na disku spĺňa zadaný špecifikátor z requirements.txt (PEP 440 / PEP 508).
+        
+        Args:
+            spec_string (str): Celá špecifikácia požiadavky (napr. 'colorama==0.4.6', 'pytest>=8.0.0,<9').
+            installed_version (str): Skutočne nainštalovaná verzia na disku (napr. '0.4.6').
+
+        Returns:
+            bool: True ak nainštalovaná verzia plne vyhovuje špecifikácii, inak False.
+        """
+        if not installed_version:
+            return False
+        try:
+            spec = spec_string.split(";")[0].strip()
+            # URL, git, lokálne cesty a editable balíčky považujeme za vyhovujúce, ak už na disku sú
+            if "@" in spec or "://" in spec or spec.startswith((".", "/", "\\", "git+", "-e")):
+                return True
+            # Odstránenie [extras] pred porovnávaním čísel verzií
+            spec = re.sub(r"\[[^\]]*\]", "", spec)
+            match = re.match(r"^[A-Za-z0-9_.\-]+\s*(.*)$", spec)
+            ver_spec = match.group(1).strip().strip("()") if match else ""
+            if not ver_spec:
+                return True
+            from packaging.specifiers import SpecifierSet
+            return SpecifierSet(ver_spec).contains(installed_version, prereleases=True)
+        except Exception:
+            return True
+
+    # =========================================================================
     # --- SYNCHRONIZÁCIA: INSTALL_SYNC ---
     # =========================================================================
 
@@ -1392,14 +1448,25 @@ class AptLogic:
     def install_sync(core, venv_path: str, log_callback, req_file_path: str = None) -> bool:
         """
         Vykoná kompletnú stavovú synchronizáciu medzi súborom requirements.txt a venvom.
+        Robustne vyhodnocuje nielen prítomnosť balíčka, ale aj súlad jeho nainštalovanej verzie.
         
         Kroky cyklu:
-        1. DIFF: Zistí, čo v prostredí chýba a čo bolo zo súboru odstránené.
-        2. INSTALL: Nainštaluje iba chýbajúce balíčky.
+        1. DIFF: Zistí, čo v prostredí chýba alebo nespĺňa verziu, a čo bolo zo súboru odstránené.
+        2. INSTALL: Nainštaluje iba chýbajúce balíčky alebo balíčky s nesúladom verzie.
         3. EXTRAS SYNC: Prepočíta a zaktualizuje viazané extras.
         4. AUTOREMOVE: Odstráni siroty, ktoré uvoľnilo zmazanie riadkov z requirements.txt
            (avšak IBA ak ich nedrží 'explicit' alebo 'linker_packages_bound').
         5. ZÁPIS: Uloží nový zoznam do 'requirements_cache'.
+        6. KONTROLA: Zbehne finálny UV/Pip check integrity prostredia.
+
+        Args:
+            core: Inštancia ProjectCore.
+            venv_path (str): Cesta k virtuálnemu prostrediu.
+            log_callback: Funkcia na prijímanie textového výstupu operácie.
+            req_file_path (str, voliteľné): Presná cesta k súboru requirements.txt.
+
+        Returns:
+            bool: True pri úspešnom dokončení synchronizácie, False pri chybe.
         """
         with AptLogic._get_venv_lock(venv_path):
             log_callback(AptLogic._tr("apt_diff_comparing", "\n📦 [APT: STAV 1 - DIFF] Porovnávam požiadavky z requirements.txt voči JSON stavu..."))
@@ -1411,33 +1478,66 @@ class AptLogic:
 
                 pamat_extras = AptLogic._scan_requirements_for_extras(req_file_path)
 
-                raw_wanted = RequirementsParser.parse(req_file_path, pip_e_root=core.pip_e_packages_root) if os.path.exists(req_file_path) else set()
-                wanted_packages = {AptLogic._normalize(p) for p in raw_wanted}
+                # 1. PARSER načíta požiadavky aj s verziami zo súboru
+                pip_e_root = getattr(core, 'pip_e_packages_root', '')
+                requirements_map = RequirementsParser.parse_requirements(req_file_path, pip_e_root=pip_e_root) if os.path.exists(req_file_path) else {}
+                wanted_packages = set(requirements_map.keys())
 
                 state_data = AptLogic._load_state_data(venv_path)
                 cached_reqs = set(state_data.get("requirements_cache", []))
                 released_from_reqs = list(cached_reqs - wanted_packages)
 
-                graph = AptLogic.get_dependency_graph(venv_path, core)
-                if graph is None:
-                    log_callback(AptLogic._tr("apt_err_list_failed", "❌ [APT: CHYBA] Zlyhalo načítanie zoznamu balíčkov."))
-                    return False
+                # 2. Načítame reálne nainštalované verzie priamo z disku
+                installed_versions = AptLogic._collect_installed_versions(venv_path)
 
-                installed_packages = set(graph.keys())
-                missing_packages = wanted_packages - installed_packages
+                missing_install_args = []
+                missing_log_labels = []
+
+                # 3. APT sa spýta PARSERA: spĺňa verzia na disku požiadavku zo súboru?
+                for norm_pkg, req_line in requirements_map.items():
+                    inst_ver = installed_versions.get(norm_pkg)
+                    if not inst_ver:
+                        # Balíček vôbec nie je na disku
+                        missing_log_labels.append(norm_pkg)
+                        if req_line.startswith("-e "):
+                            missing_install_args.extend(["-e", req_line[3:].strip()])
+                        else:
+                            missing_install_args.append(req_line)
+                    elif not RequirementsParser.is_satisfied(req_line, inst_ver):
+                        # Balíček na disku je, ale PARSER vyhodnotil, že nespĺňa verziu (napr. 2.0.0 namiesto ==2.1)
+                        missing_log_labels.append(f"{norm_pkg} (akt: {inst_ver} -> žiad: {req_line})")
+                        if req_line.startswith("-e "):
+                            missing_install_args.extend(["-e", req_line[3:].strip()])
+                        else:
+                            missing_install_args.append(req_line)
 
                 if released_from_reqs:
                     log_callback(AptLogic._tr("apt_released_from_reqs", "  🔻 Uvoľnené zo súboru: {pkgs}", pkgs=', '.join(released_from_reqs)))
-                if missing_packages:
-                    log_callback(AptLogic._tr("apt_missing_packages", "  🔺 Chýbajúce v prostredí: {pkgs}", pkgs=', '.join(missing_packages)))
+                if missing_log_labels:
+                    log_callback(AptLogic._tr("apt_missing_packages", "  🔺 Chýbajúce / nesúlad verzií: {pkgs}", pkgs=', '.join(missing_log_labels)))
 
-                if missing_packages:
-                    log_callback(AptLogic._tr("apt_installing_reqs", "🚀 [APT: STAV 2 - INSTALL] Inštalujem požiadavky: {pkgs}", pkgs=', '.join(missing_packages)))
+                # 4. Spustenie inštalácie len pre tie, ktoré reálne chýbajú alebo potrebujú zmenu verzie
+                
+                CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
+                env = os.environ.copy()
+                env["PYTHONIOENCODING"] = "utf-8"
+                env["PYTHONUTF8"] = "1"
+                
+                if missing_install_args:
+                    log_callback(AptLogic._tr("apt_installing_reqs", "🚀 [APT: STAV 2 - INSTALL] Inštalujem požiadavky: {pkgs}", pkgs=', '.join(missing_log_labels)))
                     dispatcher = PackageManagerFactory.get_dispatcher(core.package_manager, venv_path)
-                    install_args = dispatcher.get("install_multiple_exact", packages=list(missing_packages))
+                    install_args = dispatcher.get("install_multiple_exact", packages=missing_install_args)
 
-                    CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
-                    process = subprocess.Popen(install_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=CREATE_NO_WINDOW)
+                    process = subprocess.Popen(
+                        install_args, 
+                        stdout=subprocess.PIPE, 
+                        stderr=subprocess.STDOUT, 
+                        text=True, 
+                        encoding="utf-8", 
+                        errors="replace", 
+                        env=env,
+                        creationflags=CREATE_NO_WINDOW
+                    )
                     for line in process.stdout:
                         log_callback(f"  {line.strip()}")
                     process.wait()
@@ -1445,15 +1545,13 @@ class AptLogic:
                         log_callback(AptLogic._tr("apt_install_failed", "❌ [APT: CHYBA] Inštalácia zlyhala. Stav JSON ostáva nezmenený."))
                         return False
                 else:
-                    log_callback(AptLogic._tr("apt_install_all_present", "✅ [APT: STAV 2 - INSTALL] Všetky požadované balíčky sú prítomné."))
+                    log_callback(AptLogic._tr("apt_install_all_present", "✅ [APT: STAV 2 - INSTALL] Všetky požadované balíčky a ich verzie sú v poriadku."))
 
-                # ZÁPIS DO JSONU EXPLICITNE PRE REQUIREMENTS KONTEXT A SYNCHRONIZÁCIA EXTRAS
-                # 1. Odviažeme extras pre balíčky, ktoré boli úplne odstránené zo súboru
+                # 5. Aktualizácia väzieb extras
                 for rel_pkg in list(released_from_reqs):
                     bound_kids = AptLogic.unbind_extras_for_parent(venv_path, rel_pkg, context="requirements")
                     released_from_reqs.extend(bound_kids)
 
-                # 2. Skontrolujeme zmenu extras pre balíčky, ktoré v súbore zostali (napr. requests[socks] -> requests)
                 state_data = AptLogic._load_state_data(venv_path)
                 current_req_bounds = state_data.get("requirements_extras_bound", {})
                 all_parents_to_check = wanted_packages | set(current_req_bounds.keys())
@@ -1472,13 +1570,12 @@ class AptLogic:
                         if bound_kids:
                             released_from_reqs.extend(bound_kids)
 
-                # 3. Cache sa aktualizuje PRED autoremove, aby stav odrážal nový súbor
-                #    a vlastníctvo (get_all_owned_packages) nepovažovalo zmazané riadky za stále držané.
+                # 6. Zápis holých názvov do cache pred autoremove
                 state_data = AptLogic._load_state_data(venv_path)
                 state_data["requirements_cache"] = sorted(list(wanted_packages))
                 AptLogic._save_state_data(venv_path, state_data)
 
-                # 4. Ak pribudli uvoľnené balíčky alebo odobrané extras, spustíme čistenie
+                # 7. Autoremove uvoľnených balíčkov
                 if released_from_reqs:
                     unique_released = list(dict.fromkeys(released_from_reqs))
                     log_callback(AptLogic._tr("apt_autoremove_removing", "🧹 [APT: STAV 4 - AUTOREMOVE] Odstraňujem balíčky: {pkgs}", pkgs=', '.join(unique_released)))
@@ -1487,6 +1584,46 @@ class AptLogic:
                 state_data = AptLogic._load_state_data(venv_path)
                 state_data["requirements_cache"] = sorted(list(wanted_packages))
                 AptLogic._save_state_data(venv_path, state_data)
+
+                # 8. Kontrola závislostí celého prostredia (UV / Pip Check)
+                manager_type = getattr(core, "package_manager", "pip")
+                
+                # 1. Dynamický text pre začiatok kontroly
+                msg_check = AptLogic._tr(
+                    "apt_checking_deps", 
+                    "--- Vykonávam {0} kontrolu závislostí... ---", 
+                    manager_type.upper()
+                )
+                log_callback(msg_check)
+
+                dispatcher = PackageManagerFactory.get_dispatcher(manager_type, venv_path)
+                cmd_check = dispatcher.get("check")
+                CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
+                
+                check_proc = subprocess.run(
+                    cmd_check, 
+                    capture_output=True, 
+                    text=True, 
+                    encoding="utf-8", 
+                    errors="replace", 
+                    env=env,
+                    creationflags=CREATE_NO_WINDOW
+                )
+                
+                if check_proc.returncode == 0:
+                    # 2. Úspešný stav
+                    msg_ok = AptLogic._tr("apt_deps_compatible", "✅ Všetky závislosti sú kompatibilné.")
+                    log_callback(msg_ok)
+                else:
+                    # 3. Chybový stav s dynamickým vložením manažéra a samotnej chyby
+                    out_err = (check_proc.stdout + "\n" + check_proc.stderr).strip()
+                    msg_err = AptLogic._tr(
+                        "apt_deps_conflicts", 
+                        "⚠️ [{0} Check] Zistené nezrovnalosti v závislostiach:\n{1}", 
+                        manager_type.upper(), 
+                        out_err
+                    )
+                    log_callback(msg_err)
 
                 log_callback(AptLogic._tr("apt_cycle_done", "✅ [APT: HOTOVO] Celý stavový cyklus úspešne dokončený."))
                 return True

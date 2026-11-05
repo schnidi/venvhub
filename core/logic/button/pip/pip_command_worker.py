@@ -21,13 +21,24 @@ class PipCommandWorker(QObject):
     error = pyqtSignal(str)
 
     def __init__(self, venv_path, full_command, manager_type="pip"):
+        """
+        Inicializuje workera pre spustenie príkazu balíčkovacieho manažéra.
+
+        Args:
+            venv_path (str): Cesta k prostrediu.
+            full_command (list[str]): Zoznam argumentov, napr. ['uv', 'pip', 'install', 'numpy', '--python', '...']
+            manager_type (str): Typ manažéra ('pip' alebo 'uv').
+        """
         super().__init__()
         self.venv_path = venv_path
         self.manager_type = manager_type
-        # Očakáva komplet zoznam, napr. ['uv', 'pip', 'install', 'numpy', '--python', '...']
         self.full_command = full_command 
 
     def run(self):
+        """
+        Vykoná požadovaný príkaz, nasmeruje výstup do GUI a na záver 
+        spustí univerzálnu kontrolu kompatibility závislostí.
+        """
         try:
             self.started.emit()
             CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -49,17 +60,39 @@ class PipCommandWorker(QObject):
 
             final_returncode = process.returncode
 
+            # Ak prvotná inštalácia/odinštalácia prebehla úspešne, skontrolujeme prostredie
             if process.returncode == 0:
-                # --- KONTROLA ZÁVISLOSTÍ PRE UV VETVU ---
-                if self.manager_type == "uv":
-                    self.output_line.emit(LanguageManager.get("uv_checking_deps", "--- Vykonávam UV kontrolu závislostí... ---"))
-                    dispatcher = PackageManagerFactory.get_dispatcher("uv", self.venv_path)
-                    cmd_check = dispatcher.get("check")
-                    check_proc = subprocess.run(cmd_check, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-                    
-                    if check_proc.returncode != 0:
-                        output_text = check_proc.stdout + "\n" + check_proc.stderr
-                        conflicts = list(set(re.findall(r"requires\s+`([^`]+)`", output_text)))
+                # --- UNIVERZÁLNA KONTROLA ZÁVISLOSTÍ (UV aj PIP) ---
+                msg_check = LanguageManager.get(
+                    "apt_checking_deps", 
+                    "--- Vykonávam {0} kontrolu závislostí... ---"
+                ).format(self.manager_type.upper())
+                self.output_line.emit(msg_check)
+
+                dispatcher = PackageManagerFactory.get_dispatcher(self.manager_type, self.venv_path)
+                cmd_check = dispatcher.get("check")
+                
+                check_proc = subprocess.run(
+                    cmd_check, 
+                    capture_output=True, 
+                    text=True, 
+                    creationflags=CREATE_NO_WINDOW
+                )
+                
+                if check_proc.returncode == 0:
+                    msg_ok = LanguageManager.get("apt_deps_compatible", "✅ Všetky závislosti sú kompatibilné.")
+                    self.output_line.emit(msg_ok)
+                else:
+                    out_err = (check_proc.stdout + "\n" + check_proc.stderr).strip()
+                    msg_err = LanguageManager.get(
+                        "apt_deps_conflicts", 
+                        "⚠️ [{0} Check] Zistené nezrovnalosti v závislostiach:\n{1}"
+                    ).format(self.manager_type.upper(), out_err)
+                    self.output_line.emit(msg_err)
+
+                    # --- AUTO-FIX LOGIKA VÝHRADNE PRE UV (Dokáže parsovať svoj vlastný výstup) ---
+                    if self.manager_type == "uv":
+                        conflicts = list(set(re.findall(r"requires\s+`([^`]+)`", out_err)))
                         
                         if conflicts:
                             self.output_line.emit(LanguageManager.get("uv_found_conflicts", "Zistené konflikty: {0}").format(', '.join(conflicts)))
@@ -94,8 +127,10 @@ class PipCommandWorker(QObject):
                             self.output_line.emit(LanguageManager.get("uv_parse_error_worker", "⚠️ Boli nájdené problémy so závislosťami, ale aplikácia ich nedokázala automaticky vyparsovať."))
                             final_returncode = 1
                     else:
-                        self.output_line.emit(LanguageManager.get("uv_compatible", "✅ Všetky závislosti sú kompatibilné."))
+                        # Ak sme v režime PIP, chyba zostane zaznamenaná, ale autofix sa nespúšťa
+                        final_returncode = 1
 
+                # Ak všetko (vrátane checku) zbehlo na výbornú, zaktualizujeme rodný list
                 if final_returncode == 0:
                     BirthCertificateGenerator.update_venv_certificate(self.venv_path)
             

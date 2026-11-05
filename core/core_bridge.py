@@ -5,7 +5,7 @@
 #----------------------------------------------------
 
 from typing import Any
-from core.core_states import CoreService, IDEType, IDEStatus, IDEProfileMode
+from core.core_states import CoreService, IDEType, IDEStatus, IDEProfileMode, LanguageStatus
 from core.logic.vscode_user.sluzby.ide_paths import IDEPaths
 
 
@@ -71,11 +71,17 @@ class CoreBridge:
         """Vráti zoznam všetkých aktívne zaregistrovaných služieb v jadre."""
         print("\n--- [CoreBridge AUDIT ŠTART] ---")
         registered = []
+
+        # Zoznam služieb, ktoré sú zámerne typu LAZY (načítavajú sa na požiadanie)
+        lazy_services = {CoreService.PACKAGE_UPDATE}
         
         for service_enum in CoreService:
             if service_enum in cls._services:
                 registered.append(service_enum.value)
                 print(f"[CoreBridge] ✅ Služba '{service_enum.value}' je pripravená.")
+            elif service_enum in lazy_services:
+                registered.append(service_enum.value)
+                print(f"[CoreBridge] ⚡ Služba '{service_enum.value}' je pripravená (LAZY).")
             else:
                 print(f"[CoreBridge] ❌ POZOR: Služba '{service_enum.value}' NIE JE registrovaná!")
                 
@@ -129,3 +135,27 @@ class CoreBridge:
                 lang_service.language_changed.disconnect(slot)
             except (TypeError, RuntimeError):
                 pass
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE AKTUALIZÁCIU BALÍČKOV (PACKAGE_UPDATE)
+    # =========================================================================
+    @classmethod
+    def get_package_update_service(cls):
+        """
+        Lazy-loader: Služba sa importuje a zaregistruje do centrálneho registra
+        AŽ VTEDY, keď je prvýkrát vyžiadaná. Využíva register_service.
+        """
+        service = cls.get_service(CoreService.PACKAGE_UPDATE)
+        if service is None:
+            from core.logic.sluzby.venv.package_update import PackageUpdateService
+            cls.register_service(CoreService.PACKAGE_UPDATE, PackageUpdateService)
+            service = PackageUpdateService
+        return service
+
+    @classmethod
+    def update_all_packages(cls, venv_path: str, core=None, manager_type: str = "pip", log_callback=None) -> bool:
+        """
+        Oficiálny mostík jadra pre spustenie celého cyklu Update All.
+        """
+        service = cls.get_package_update_service()
+        return service.update_all(venv_path, core, manager_type, log_callback)

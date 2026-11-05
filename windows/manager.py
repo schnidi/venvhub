@@ -16,7 +16,8 @@ from core.logic.button.manager.delete import DeleteHandler
 from core.logic.button.manager.actions import ActionHandler
 from core.logic.button.manager.row_actions import RowActionHandler 
 from core.logic.pip_manager import PipManager
-from core.logic.language_manager import LanguageManager
+
+from core.core_bridge import CoreBridge  # <--- NOVÝ PREKLADACÍ SYSTÉM
 from core._path import Paths
 
 from windows.pip_manager_window import PipManagerWindow
@@ -26,17 +27,12 @@ from windows.builder_window import BuilderWindow
 
 from windows.custom_title_bar import CustomTitleBar
 from core.logic.button.manager.py_launcher import ScriptLauncherHandler
-
-# Import pre Drag and Drop tabuľku
 from core.logic.sluzby.drag_and_drop import AdvancedDragDropTable
-
-# --- UV DETECTOR ---
 from core.logic.uv_detector import UVDetector
 
 from windows.python_ver import PythonVerWindow
 from windows.autostart_window import AutostartWindow
 from windows.pip_e_window import PipEWindow
-# --- IMPORT PRE LOKÁLNE BALÍČKY A VS CODE KONTÁ ---
 from windows.local_packages_window import LocalPackagesWindow
 
 from windows.vscode_user import VSCodeUserWindow
@@ -45,7 +41,6 @@ from core.logic.vscode_user.start_vs_code_user import VSCodeLauncher
 from core.logic.sluzby.windows_location import WindowLocation
 from core.logic.box.ide_settings import IDESettingsHandler
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
 from windows.custom_message_box import CustomMessageBox
 
 
@@ -79,7 +74,7 @@ class MasterManager(QWidget):
         self.title_bar_layout.addWidget(self.title_bar)
         
         self.main_layout_manager.setContentsMargins(1, 1, 1, 1)
-        self.setWindowTitle(LanguageManager.get("manager_window_title", "VenvHub Pro - Správca")) 
+        self.setWindowTitle(CoreBridge.translate("manager_window_title", "VenvHub Pro - Správca")) 
         
         self.selected_venv_path = None
         
@@ -105,7 +100,6 @@ class MasterManager(QWidget):
         self.autostart_window = AutostartWindow(self.core, self)
         self.container_v_layout.addWidget(self.autostart_window)
         
-        # Prepojíme ukladanie skupín so synchronizáciou Kontajnera
         self.config_changed.connect(self.autostart_window.sync_with_core)
 
         # --- PASÍVNY LISTENER PRE IDE V RIADKOCH TABUĽKY ---
@@ -116,86 +110,83 @@ class MasterManager(QWidget):
         WindowLocation.restore_position(self, "manager_window")
 
     def on_ide_state_changed(self, payload=None):
-        """Pasívny listener: Aktualizuje stav IDE tlačidiel vo všetkých riadkoch tabuľky."""
         for row in range(self.table_venvs.rowCount()):
             act = self.table_venvs.cellWidget(row, 3)
             if act and hasattr(act, 'btn_vscode'):
                 IDESettingsHandler.apply_ide_button_state(act.btn_vscode, self.core)
 
     def closeEvent(self, event):
-        """Uloží pozíciu okna a odhlási odber signálu."""
         WindowLocation.save_position(self, "manager_window")
         IDESettingsHandler.disconnect_ide_changed(self.on_ide_state_changed)
         event.accept()
 
     def retranslate_ui(self):
-        LanguageManager.translate_ui(self)
+        CoreBridge.translate_window(self)
         
-        title_text = LanguageManager.get("manager_window_title", "VenvHub Pro - Správca")
+        title_text = CoreBridge.translate("manager_window_title", "VenvHub Pro - Správca")
         self.setWindowTitle(title_text)
         
         if hasattr(self, 'title_bar') and self.title_bar:
             self.title_bar.lbl_title.setText(title_text)
         
-        # Preklady záložiek
-        self.tab_widget.setTabText(0, LanguageManager.get("tab_venvs", "Správa Venvs"))
-        self.tab_widget.setTabText(1, LanguageManager.get("tab_multi", "Hromadné Spúšťanie (Multi-run)"))
-        self.tab_widget.setTabText(2, LanguageManager.get("tab_container", "Kontajner / Autostart"))
-        self.tab_widget.setTabText(3, LanguageManager.get("tab_settings", "Nastavenia"))
-        self.tab_widget.setTabText(4, LanguageManager.get("tab_builder", "PyInstaller Builder"))
-        self.tab_widget.setTabText(5, LanguageManager.get("tab_local_python", "Local Python"))
+        self.tab_widget.setTabText(0, CoreBridge.translate("tab_venvs", "Správa Venvs"))
+        self.tab_widget.setTabText(1, CoreBridge.translate("tab_multi", "Hromadné Spúšťanie (Multi-run)"))
+        self.tab_widget.setTabText(2, CoreBridge.translate("tab_container", "Kontajner / Autostart"))
+        self.tab_widget.setTabText(3, CoreBridge.translate("tab_settings", "Nastavenia"))
+        self.tab_widget.setTabText(4, CoreBridge.translate("tab_builder", "PyInstaller Builder"))
+        self.tab_widget.setTabText(5, CoreBridge.translate("tab_local_python", "Local Python"))
 
         if hasattr(self, 'autostart_window') and self.autostart_window:
             self.autostart_window.retranslate_ui()
         
         if hasattr(self, 'lbl_manager_script'):
-            self.lbl_manager_script.setText(LanguageManager.get("lbl_manager_script", "Spúšťací skript:"))
+            self.lbl_manager_script.setText(CoreBridge.translate("lbl_manager_script", "Spúšťací skript:"))
         if hasattr(self, 'edit_manager_script'):
-            self.edit_manager_script.setPlaceholderText(LanguageManager.get("ph_manager_script", "napr. main.py"))
+            self.edit_manager_script.setPlaceholderText(CoreBridge.translate("ph_manager_script", "napr. main.py"))
         
-        self.table_venvs.horizontalHeaderItem(0).setText(LanguageManager.get("col_venv_name_1", "Názov venv"))
-        self.table_venvs.horizontalHeaderItem(1).setText(LanguageManager.get("col_version", "Verzia"))
-        self.table_venvs.horizontalHeaderItem(2).setText(LanguageManager.get("col_status", "Stav"))
-        self.table_venvs.horizontalHeaderItem(3).setText(LanguageManager.get("col_actions", "Akcie"))
-        self.group_pip.setTitle(LanguageManager.get("group_pip", "Pip Manažér (vyberte venv v tabuľke)"))
-        self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---"))
-        self.group_multi_groups.setTitle(LanguageManager.get("group_multi_groups", "Skupiny"))
-        self.group_multi_available.setTitle(LanguageManager.get("group_multi_available", "Dostupné projekty"))
-        self.btn_save_group.setText(LanguageManager.get("btn_save_group", "Uložiť zmeny v skupine"))
-        self.tree_all_projects.headerItem().setText(0, LanguageManager.get("col_project_venv", "Projekt / Venv"))
+        self.table_venvs.horizontalHeaderItem(0).setText(CoreBridge.translate("col_venv_name_1", "Názov venv"))
+        self.table_venvs.horizontalHeaderItem(1).setText(CoreBridge.translate("col_version", "Verzia"))
+        self.table_venvs.horizontalHeaderItem(2).setText(CoreBridge.translate("col_status", "Stav"))
+        self.table_venvs.horizontalHeaderItem(3).setText(CoreBridge.translate("col_actions", "Akcie"))
+        self.group_pip.setTitle(CoreBridge.translate("group_pip", "Pip Manažér (vyberte venv v tabuľke)"))
+        self.lbl_selected_venv.setText(CoreBridge.translate("lbl_selected_venv_none", "Zvolený: ---"))
+        self.group_multi_groups.setTitle(CoreBridge.translate("group_multi_groups", "Skupiny"))
+        self.group_multi_available.setTitle(CoreBridge.translate("group_multi_available", "Dostupné projekty"))
+        self.btn_save_group.setText(CoreBridge.translate("btn_save_group", "Uložiť zmeny v skupine"))
+        self.tree_all_projects.headerItem().setText(0, CoreBridge.translate("col_project_venv", "Projekt / Venv"))
         
         if not self.table_group_members.horizontalHeaderItem(0): 
             self.table_group_members.setHorizontalHeaderLabels(["", "", ""])
-        self.table_group_members.horizontalHeaderItem(0).setText(LanguageManager.get("col_project", "Projekt"))
-        self.table_group_members.horizontalHeaderItem(1).setText(LanguageManager.get("col_venv_name", "Venv"))
-        self.table_group_members.horizontalHeaderItem(2).setText(LanguageManager.get("col_script", "Spúšťací skript"))
+        self.table_group_members.horizontalHeaderItem(0).setText(CoreBridge.translate("col_project", "Projekt"))
+        self.table_group_members.horizontalHeaderItem(1).setText(CoreBridge.translate("col_venv_name", "Venv"))
+        self.table_group_members.horizontalHeaderItem(2).setText(CoreBridge.translate("col_script", "Spúšťací skript"))
         
         current_group_item = self.list_multi_groups.currentItem()
         if current_group_item:
             group_name = current_group_item.text()
-            self.group_multi_members.setTitle(LanguageManager.get("fmt_group_members", "Členovia skupiny: {0}").format(group_name))
+            self.group_multi_members.setTitle(CoreBridge.translate("fmt_group_members", "Členovia skupiny: {0}").format(group_name))
         else:
-            self.group_multi_members.setTitle(LanguageManager.get("fmt_group_members_none", "Členovia skupiny: ---"))
+            self.group_multi_members.setTitle(CoreBridge.translate("fmt_group_members_none", "Členovia skupiny: ---"))
 
-        self.group_paths.setTitle(LanguageManager.get("group_paths", "Základné cesty"))
+        self.group_paths.setTitle(CoreBridge.translate("group_paths", "Základné cesty"))
         if hasattr(self, 'lbl_pip_e_pkg'):
-            self.lbl_pip_e_pkg.setText(LanguageManager.get("lbl_pip_e_pkg", "Lokálne balíčky (pip -e):"))
+            self.lbl_pip_e_pkg.setText(CoreBridge.translate("lbl_pip_e_pkg", "Lokálne balíčky (pip -e):"))
         if hasattr(self, 'lbl_active_ide'):
-            self.lbl_active_ide.setText(LanguageManager.get("lbl_active_ide", "Predvolený editor (IDE):"))
+            self.lbl_active_ide.setText(CoreBridge.translate("lbl_active_ide", "Predvolený editor (IDE):"))
         if hasattr(self, 'lbl_portable_vscode'):
-            self.lbl_portable_vscode.setText(LanguageManager.get("lbl_portable_vscode", "Prenosný VS Code:"))
+            self.lbl_portable_vscode.setText(CoreBridge.translate("lbl_portable_vscode", "Prenosný VS Code:"))
         if hasattr(self, 'lbl_portable_cursor'):
-            self.lbl_portable_cursor.setText(LanguageManager.get("lbl_portable_cursor", "Prenosný Cursor:"))
+            self.lbl_portable_cursor.setText(CoreBridge.translate("lbl_portable_cursor", "Prenosný Cursor:"))
 
-        self.group_themes.setTitle(LanguageManager.get("group_themes", "Vzhľad aplikácie (Skiny)"))
-        self.lbl_active_theme.setText(LanguageManager.get("lbl_active_theme", "Aktívna téma:"))
-        self.btn_import_theme.setText(LanguageManager.get("btn_import_theme", "Importovať tému..."))
+        self.group_themes.setTitle(CoreBridge.translate("group_themes", "Vzhľad aplikácie (Skiny)"))
+        self.lbl_active_theme.setText(CoreBridge.translate("lbl_active_theme", "Aktívna téma:"))
+        self.btn_import_theme.setText(CoreBridge.translate("btn_import_theme", "Importovať tému..."))
         
         if hasattr(self, 'group_package_manager'):
-            self.group_package_manager.setTitle(LanguageManager.get("group_pkg_manager", "Správca balíčkov (Rýchlosť inštalácie)"))
-            self.lbl_pkg_manager.setText(LanguageManager.get("lbl_pkg_manager", "Predvolený inštalátor:"))
-            self.combo_pkg_manager.setItemText(0, LanguageManager.get("opt_pip", "Základný (Pip)"))
-            self.combo_pkg_manager.setItemText(1, LanguageManager.get("opt_uv", "Ultra rýchly (UV - Astral)"))
+            self.group_package_manager.setTitle(CoreBridge.translate("group_pkg_manager", "Správca balíčkov (Rýchlosť inštalácie)"))
+            self.lbl_pkg_manager.setText(CoreBridge.translate("lbl_pkg_manager", "Predvolený inštalátor:"))
+            self.combo_pkg_manager.setItemText(0, CoreBridge.translate("opt_pip", "Základný (Pip)"))
+            self.combo_pkg_manager.setItemText(1, CoreBridge.translate("opt_uv", "Ultra rýchly (UV - Astral)"))
 
         if hasattr(self, 'combo_active_ide'):
             IDESettingsHandler.populate_combo(self.combo_active_ide, self.core)
@@ -300,9 +291,8 @@ class MasterManager(QWidget):
 
     def open_pip_manager(self):
         if not self.selected_venv_path:
-            title = LanguageManager.get("title_error", "Chyba")
-            msg = LanguageManager.get("msg_no_venv_selected_for_pip", "Nie je vybrané žiadne prostredie.")
-            # --- ZMENA: Použitie CustomMessageBox ---
+            title = CoreBridge.translate("title_error", "Chyba")
+            msg = CoreBridge.translate("msg_no_venv_selected_for_pip", "Nie je vybrané žiadne prostredie.")
             CustomMessageBox.warning(self, title, msg)
             return
         project_root = Paths.get_project_path(self.core.projects_root, self.core.active_project)
@@ -317,14 +307,12 @@ class MasterManager(QWidget):
 
     def open_local_packages_window(self):
         if not self.selected_venv_path:
-            # --- ZMENA: Použitie CustomMessageBox ---
-            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
+            CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), CoreBridge.translate("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
             return
             
         local_root = getattr(self.core, 'local_packages_root', '')
         if not local_root or not os.path.exists(local_root):
-            # --- ZMENA: Použitie CustomMessageBox ---
-            CustomMessageBox.warning(self, LanguageManager.get("title_warning", "Upozornenie"), LanguageManager.get("msg_set_local_pkg_root", "Prejdite na záložku 'Nastavenia' a zvoľte platnú zložku pre 'Lokálne balíčky'."))
+            CustomMessageBox.warning(self, CoreBridge.translate("title_warning", "Upozornenie"), CoreBridge.translate("msg_set_local_pkg_root", "Prejdite na záložku 'Nastavenia' a zvoľte platnú zložku pre 'Lokálne balíčky'."))
             return
 
         if self.local_pkg_window is not None:
@@ -337,8 +325,7 @@ class MasterManager(QWidget):
 
     def open_pip_e_window(self):
         if not self.selected_venv_path:
-            # --- ZMENA: Použitie CustomMessageBox ---
-            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
+            CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), CoreBridge.translate("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
             return
 
         if self.pip_e_window is not None:
@@ -350,7 +337,6 @@ class MasterManager(QWidget):
         self.pip_e_window.activateWindow()
 
     def open_vscode_user_window(self):
-        """Otvorí okno pre správu používateľských profilov pre aktuálne zvolený editor."""
         if self.vscode_user_window is not None:
             self.vscode_user_window.close()
             
@@ -362,17 +348,15 @@ class MasterManager(QWidget):
         self.vscode_user_window.activateWindow()
 
     def on_vscode_profiles_changed_externally(self):
-        """Vyvolá sa, ak sa v podrobnom okne používateľov pridá/zmaže/zvolí profil."""
         self.populate_vscode_users_combo()
         self.config_changed.emit()
 
     def populate_vscode_users_combo(self):
-        """Načíta a naplní zoznam dostupných profilov do ComboBoxu v Nastaveniach podľa aktívneho IDE."""
         if not hasattr(self, 'combo_vscode_user'): return
         
         self.combo_vscode_user.blockSignals(True)
         self.combo_vscode_user.clear()
-        self.combo_vscode_user.addItem(LanguageManager.get("vscode_user_none", "--- Žiadny ---"), "")
+        self.combo_vscode_user.addItem(CoreBridge.translate("vscode_user_none", "--- Žiadny ---"), "")
         
         root_path = getattr(self.core, 'vscode_users_root', '')
         active_ide = getattr(self.core, 'active_ide', 'vscode')
@@ -395,7 +379,6 @@ class MasterManager(QWidget):
         self.combo_vscode_user.blockSignals(False)
 
     def on_vscode_user_changed(self, index):
-        """Vyvolá sa, keď používateľ zmení profil v ComboBoxe v podrobnom Správcovi."""
         if index == -1 or not hasattr(self, 'combo_vscode_user'): return
         
         selected_user_id = self.combo_vscode_user.itemData(index)
@@ -415,17 +398,17 @@ class MasterManager(QWidget):
         self.on_venv_selected()
         if self.selected_venv_path:
             menu = QMenu()
-            action_manage = menu.addAction(LanguageManager.get("ctx_manage_packages", "📦 Spravovať balíčky (Pip Manager)"))
+            action_manage = menu.addAction(CoreBridge.translate("ctx_manage_packages", "📦 Spravovať balíčky (Pip Manager)"))
             action_manage.triggered.connect(self.open_pip_manager)
             
-            action_local_pkg = menu.addAction(LanguageManager.get("ctx_local_packages", "🔗 Lokálne balíčky"))
+            action_local_pkg = menu.addAction(CoreBridge.translate("ctx_local_packages", "🔗 Lokálne balíčky"))
             action_local_pkg.triggered.connect(self.open_local_packages_window)
 
-            action_pip_e = menu.addAction(LanguageManager.get("ctx_pip_e_packages", "✏️ Lokálne balíčky (pip -e)"))
+            action_pip_e = menu.addAction(CoreBridge.translate("ctx_pip_e_packages", "✏️ Lokálne balíčky (pip -e)"))
             action_pip_e.triggered.connect(self.open_pip_e_window)
             
             menu.addSeparator()
-            action_clone = menu.addAction(LanguageManager.get("ctx_clone_venv", "🐑 Klonovať / Zálohovať Venv"))
+            action_clone = menu.addAction(CoreBridge.translate("ctx_clone_venv", "🐑 Klonovať / Zálohovať Venv"))
             action_clone.triggered.connect(lambda: CloneHandler.run(self, self.core, self.selected_venv_path))
             menu.exec(self.table_venvs.viewport().mapToGlobal(position))
 
@@ -475,13 +458,12 @@ class MasterManager(QWidget):
         self.tree_all_projects.expandAll()
 
     def add_new_multi_group(self):
-        title = LanguageManager.get("title_new_group", "Nová Skupina")
-        label = LanguageManager.get("lbl_enter_group_name", "Zadajte názov pre novú skupinu:")
+        title = CoreBridge.translate("title_new_group", "Nová Skupina")
+        label = CoreBridge.translate("lbl_enter_group_name", "Zadajte názov pre novú skupinu:")
         text, ok = QInputDialog.getText(self, title, label)
         if ok and text:
             if text in self.core.multi_groups:
-                # --- ZMENA: Použitie CustomMessageBox ---
-                CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_group_exists", "Skupina už existuje."))
+                CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), CoreBridge.translate("msg_group_exists", "Skupina už existuje."))
                 return
             self.core.multi_groups[text] = []
             self.core.save_config()
@@ -497,13 +479,13 @@ class MasterManager(QWidget):
         self.tree_all_projects.blockSignals(True)
         if not current_item:
             self.table_group_members.setRowCount(0)
-            self.group_multi_members.setTitle(LanguageManager.get("fmt_group_members_none", "Členovia skupiny: ---"))
+            self.group_multi_members.setTitle(CoreBridge.translate("fmt_group_members_none", "Členovia skupiny: ---"))
             self.uncheck_all_projects()
             self.tree_all_projects.blockSignals(False)
             return
             
         group_name = current_item.text()
-        self.group_multi_members.setTitle(LanguageManager.get("fmt_group_members", "Členovia skupiny: {0}").format(group_name))
+        self.group_multi_members.setTitle(CoreBridge.translate("fmt_group_members", "Členovia skupiny: {0}").format(group_name))
         members = self.core.multi_groups.get(group_name, [])
         self.table_group_members.setRowCount(len(members))
         
@@ -578,8 +560,7 @@ class MasterManager(QWidget):
         cur = self.list_multi_groups.currentItem()
         if not cur: 
             if not silent:
-                # --- ZMENA: Použitie CustomMessageBox ---
-                CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), LanguageManager.get("msg_no_group_selected_save", "Nie je vybraná žiadna skupina na uloženie."))
+                CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), CoreBridge.translate("msg_no_group_selected_save", "Nie je vybraná žiadna skupina na uloženie."))
             return
             
         group_name = cur.text()
@@ -606,8 +587,7 @@ class MasterManager(QWidget):
         self.config_changed.emit()
         
         if not silent:
-            # --- ZMENA: Použitie CustomMessageBox ---
-            CustomMessageBox.information(self, LanguageManager.get("title_saved", "Uložené"), LanguageManager.get("msg_group_saved", "Skupina bola uložená."))
+            CustomMessageBox.information(self, CoreBridge.translate("title_saved", "Uložené"), CoreBridge.translate("msg_group_saved", "Skupina bola uložená."))
 
     def uncheck_all_projects(self):
         it = QTreeWidgetItemIterator(self.tree_all_projects)
@@ -620,10 +600,9 @@ class MasterManager(QWidget):
         cur = self.list_multi_groups.currentItem()
         if not cur: return
         group_name = cur.text()
-        title = LanguageManager.get("title_delete", "Zmazať?")
-        msg = LanguageManager.get("msg_delete_group_confirm", "Zmazať skupinu {group}?").format(group=group_name)
+        title = CoreBridge.translate("title_delete", "Zmazať?")
+        msg = CoreBridge.translate("msg_delete_group_confirm", "Zmazať skupinu {group}?").format(group=group_name)
         
-        # --- ZMENA: Použitie CustomMessageBox ---
         if CustomMessageBox.question(self, title, msg) == QMessageBox.StandardButton.Yes:
             if group_name in self.core.multi_groups:
                 del self.core.multi_groups[group_name]
@@ -654,11 +633,11 @@ class MasterManager(QWidget):
     def run_pip_reqs(self):
         if self.selected_venv_path:
             project_path = Paths.get_project_path(self.core.projects_root, self.core.active_project)
-            PipManager.install_requirements(self.selected_venv_path, project_path, self.log_output, self.core.package_manager)
+            PipManager.install_requirements(self.selected_venv_path, project_path, self.log_output, self.core.package_manager, core=self.core)
 
     def run_pip_upgrade_all(self):
         if self.selected_venv_path: 
-            PipManager.update_all_packages(self.selected_venv_path, self.log_output, self.core.package_manager)
+            PipManager.update_all_packages(self.selected_venv_path, self.log_output, self.core.package_manager, core=self.core)
 
     def refresh_ui_from_config(self):
         self.edit_proj.setText(self.core.projects_root)
@@ -678,11 +657,11 @@ class MasterManager(QWidget):
         # Prenosné cesty k IDE
         if hasattr(self, 'edit_portable_vscode'):
             self.edit_portable_vscode.setPlaceholderText(
-                LanguageManager.get("ph_portable_ide", "Predvolene: Systémová inštalácia")
+                CoreBridge.translate("ph_portable_ide", "Predvolene: Systémová inštalácia")
             )
         if hasattr(self, 'edit_portable_cursor'):
             self.edit_portable_cursor.setPlaceholderText(
-                LanguageManager.get("ph_portable_ide", "Predvolene: Systémová inštalácia")
+                CoreBridge.translate("ph_portable_ide", "Predvolene: Systémová inštalácia")
             )
             
         self.refresh_projects_combo()
@@ -690,12 +669,11 @@ class MasterManager(QWidget):
         self.populate_package_manager_combo()
         self.populate_vscode_users_combo()
 
-        # Naplnenie IDE ComboBoxu
         if hasattr(self, 'combo_active_ide'):
             IDESettingsHandler.populate_combo(self.combo_active_ide, self.core)
 
     def select_projects_root(self):
-        path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_projects_root", "Vyberte priečinok projektov"))
+        path = QFileDialog.getExistingDirectory(self, CoreBridge.translate("dialog_select_projects_root", "Vyberte priečinok projektov"))
         if path:
             self.core.projects_root = path
             self.core.save_config()
@@ -703,7 +681,7 @@ class MasterManager(QWidget):
             self.populate_projects_tree()
 
     def select_hub_root(self):
-        path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_hub_root", "Vyberte priečinok Venv Hub"))
+        path = QFileDialog.getExistingDirectory(self, CoreBridge.translate("dialog_select_hub_root", "Vyberte priečinok Venv Hub"))
         if path:
             self.core.venv_hub_root = path
             self.core.save_config()
@@ -711,14 +689,14 @@ class MasterManager(QWidget):
             self.populate_projects_tree()
 
     def select_local_pkg_root(self):
-        path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_local_pkg_root", "Vyberte priečinok s lokálnymi balíčkami"))
+        path = QFileDialog.getExistingDirectory(self, CoreBridge.translate("dialog_select_local_pkg_root", "Vyberte priečinok s lokálnymi balíčkami"))
         if path: 
             self.core.local_packages_root = path
             self.core.save_config()
             self.refresh_ui_from_config()
 
     def select_pip_e_root(self):
-        path = QFileDialog.getExistingDirectory(self, LanguageManager.get("dialog_select_pip_e_root", "Vyberte priečinok pre Pip-e balíčky"))
+        path = QFileDialog.getExistingDirectory(self, CoreBridge.translate("dialog_select_pip_e_root", "Vyberte priečinok pre Pip-e balíčky"))
         if path: 
             self.core.pip_e_packages_root = path
             self.core.save_config()
@@ -753,17 +731,17 @@ class MasterManager(QWidget):
         sel = self.table_venvs.selectionModel().selectedRows()
         if not sel:
             self.selected_venv_path = None
-            self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---"))
+            self.lbl_selected_venv.setText(CoreBridge.translate("lbl_selected_venv_none", "Zvolený: ---"))
             return
         row = sel[0].row()
         name = self.table_venvs.item(row, 0).text()
         ver = self.table_venvs.item(row, 1).text()
         self.selected_venv_path = Paths.get_venv_path(self.core.venv_hub_root, f"{self.core.active_project}_{name}")
-        self.lbl_selected_venv.setText(LanguageManager.get("fmt_selected_venv", "Zvolený: {0} (Python {1})").format(name, ver))
+        self.lbl_selected_venv.setText(CoreBridge.translate("fmt_selected_venv", "Zvolený: {0} (Python {1})").format(name, ver))
 
     def refresh_table(self):
         self.selected_venv_path = None
-        self.lbl_selected_venv.setText(LanguageManager.get("lbl_selected_venv_none", "Zvolený: ---"))
+        self.lbl_selected_venv.setText(CoreBridge.translate("lbl_selected_venv_none", "Zvolený: ---"))
         venvs = self.core.get_venvs_for_active_project()
         self.table_venvs.setRowCount(0)
         
@@ -787,7 +765,6 @@ class MasterManager(QWidget):
             act.rb_default.setChecked(is_def)
             act.rb_default.clicked.connect(lambda ch, p=v['path']: ActivateHandler.set_default(self.core, p, self))
             
-            # --- DYNAMICKÉ NASTAVENIE IDE TLAČIDLA CEZ JADRO ---
             IDESettingsHandler.apply_ide_button_state(act.btn_vscode, self.core)
             act.btn_vscode.clicked.connect(lambda ch, p=v['path']: self.launch_vscode_for_venv(p))
             
@@ -797,25 +774,26 @@ class MasterManager(QWidget):
             ])
 
             act.btn_stop.clicked.connect(lambda ch, p=v['path']: RowActionHandler.stop_venv(p))
-            act.btn_venv_update.clicked.connect(lambda ch, p=v['path']: PipManager.update_all_packages(p, self.log_output, self.core.package_manager))
+            
+            # --- OPRAVA: PRIDANIE CORE PARAMETRA DO TLAČIDLA UPDATE V TABUĽKE ---
+            act.btn_venv_update.clicked.connect(lambda ch, p=v['path']: PipManager.update_all_packages(p, self.log_output, self.core.package_manager, core=self.core))
+            
             act.btn_delete.clicked.connect(lambda ch, p=v['path']: DeleteHandler.run(self.core, p, self))
             self.table_venvs.setCellWidget(row, 3, act)
 
     def launch_vscode_for_venv(self, venv_path):
-        """Vyvolá spustenie VS Code / Cursoru s vybraným Venv a profilom a nastaví ho ako predvolený."""
         ActivateHandler.set_default(self.core, venv_path, self)
         
         project_path = Paths.get_project_path(self.core.projects_root, self.core.active_project)
         success, err_msg = VSCodeLauncher.launch(self.core, project_path, venv_path)
         
         if not success:
-            # --- ZMENA: Použitie CustomMessageBox ---
-            CustomMessageBox.warning(self, LanguageManager.get("title_error", "Chyba"), err_msg)
+            CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), err_msg)
 
     def populate_themes_combo(self):
         self.combo_themes.blockSignals(True)
         self.combo_themes.clear()
-        self.combo_themes.addItem(LanguageManager.get("theme_default", "Default"), "default")
+        self.combo_themes.addItem(CoreBridge.translate("theme_default", "Default"), "default")
         skins = SkinManager.get_available_skins()
         for f, d in skins.items():
             self.combo_themes.addItem(d, f)
@@ -842,8 +820,8 @@ class MasterManager(QWidget):
         self.combo_pkg_manager.blockSignals(True)
         self.combo_pkg_manager.clear()
         
-        self.combo_pkg_manager.addItem(LanguageManager.get("opt_pip", "Základný (Pip)"), "pip")
-        self.combo_pkg_manager.addItem(LanguageManager.get("opt_uv", "Ultra rýchly (UV - Astral)"), "uv")
+        self.combo_pkg_manager.addItem(CoreBridge.translate("opt_pip", "Základný (Pip)"), "pip")
+        self.combo_pkg_manager.addItem(CoreBridge.translate("opt_uv", "Ultra rýchly (UV - Astral)"), "uv")
         
         idx = self.combo_pkg_manager.findData(self.core.package_manager)
         if idx != -1:
@@ -867,17 +845,16 @@ class MasterManager(QWidget):
             UVDetector.reset_cache()
             
             if not UVDetector.is_uv_installed():
-                title = LanguageManager.get("title_uv_missing", "UV nie je nainštalované")
+                title = CoreBridge.translate("title_uv_missing", "UV nie je nainštalované")
                 active_py_name = os.path.basename(PythonDetector.get_active_python_path())
                 
-                msg = LanguageManager.get(
+                msg = CoreBridge.translate(
                     "msg_uv_missing_for_active", 
                     "Nástroj 'uv' nebol pre aktívny Python ({0}) nájdený.\n\n"
                     "Ak chcete využívať inštalátor UV, nainštalujte ho najprv do vášho aktívneho prostredia,\n"
                     "alebo preň v systéme Windows nakonfigurujte premennú PATH."
                 ).format(active_py_name)
                 
-                # --- ZMENA: Použitie CustomMessageBox ---
                 CustomMessageBox.warning(self, title, msg)
                 
                 self.combo_pkg_manager.blockSignals(True)

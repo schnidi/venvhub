@@ -20,7 +20,6 @@
     "btn_import_theme": "Import theme...",
     "btn_install": "🛠 INSTALL",
     "btn_pin_tooltip": "Always on top",
-    "btn_repair": "✅ Repair PIP",
     "btn_save_group": "Save group changes",
     "btn_toggle_mode_tooltip": "Toggle Single/Multi mode",
     "btn_update_fmt": "⬆️ Update to {0}",
@@ -449,7 +448,6 @@
     "vscode_sync_err_no_local_root": "❌ ERROR: local_packages_root is empty",
     "vscode_sync_err_no_project": "❌ ERROR: project_path is empty",
     "vscode_sync_err_project_missing": "❌ ERROR: project_path does not exist: {path}",
-    "vscode_sync_err_read": "       ❌ Error reading {path}: {error}",
     "vscode_sync_found_items": "     Found {tasks} tasks and {keys} shortcuts.",
     "vscode_sync_keys_exist": "ℹ️ keybindings.json already exists, contains {count} shortcuts.",
     "vscode_sync_keys_new": "ℹ️ keybindings.json does not exist, creating new one.",
@@ -886,6 +884,39 @@
     "msg_create_system_snapshot": "Recording the environment's system packages...",
 
     "linker_meta_unreadable_keep_state": "⚠️ [Linker-APT] Metadata of module {mod} cannot be read, keeping the previous state: {err}",
-    "linker_state_write_error": "⚠️ [Linker-APT] Error while writing the state: {err}"
+    "linker_state_write_error": "⚠️ [Linker-APT] Error while writing the state: {err}",
+
+    "apt_requirements_sync_start": "\n--- Initializing requirements from requirements.txt (APT) ---",
+    "apt_requirements_sync_fail": "⚠️ Requirements synchronization was not successful.",
+    "err_ide_not_found": "Editor {0} was not found in the system or on the portable drive.",
+    "msg_uv_missing_for_active": "The 'uv' tool was not found for the active Python ({0}).\n\nIf you want to use the UV installer, install it into your active environment first,\nor configure the PATH environment variable in Windows.",
+
+    "apt_checking_deps": "--- Performing {0} dependency check... ---",
+    "apt_deps_compatible": "✅ All dependencies are compatible.",
+    "apt_deps_conflicts": "⚠️ [{0} Check] Dependency conflicts detected:\n{1}",
+
+    "apt_install_already_present_env": "ℹ️ Package '{0}' is already installed in this environment. Installation is not required.",
+    "clone_install_build_tools": "🛠 Ensuring build tools (setuptools, wheel)...",
+    "clone_editable_pkgs": "Installing editable packages (pip -e)...",
+    "clone_done_success": "✅ Cloning completed successfully!",
+    "pipe_log_build_tools": "🛠 [PIP] Ensuring build tools (setuptools, wheel)...",
+    "pipe_log_build_tools_failed": "⚠️ Build tools preparation failed, continuing...",
+    "pip_e_ext_installed": "ℹ️ All external PIP dependencies are already installed in the venv.",
+
+    "update_apt_start": "\n🔄 [APT UPDATE] Initializing smart update...",
+    "update_step1": "📦 Step 1: Updating package manager core...",
+    "update_step2": "🔍 Step 2: Searching for outdated packages online...",
+    "update_step3": "🧠 Step 3: Applying APT rules and restrictions...",
+    "update_step4": "🚀 Step 4: Downloading and updating {0} allowed packages: {1}",
+    "update_step5": "\n🧹 Step 5: Handing over to APT core (Diff, Autoremove, and Integral Check)...",
+    "update_all_latest": "✅ All packages are currently at their latest versions.",
+    "update_err_download": "❌ Error during update download.",
+    "update_all_protected": "ℹ️ All outdated packages are protected by APT rules. Download skipped.",
+    "update_protect_req": "   🛡️ Protection: Skipping '{0}' (Version is strictly pinned in requirements.txt: {1})",
+    "update_protect_linker": "   🔗 Protection: Skipping '{0}' (Managed by local Linker development module)",
+    "update_protect_pipe": "   ✏️ Protection: Skipping '{0}' (Local editable package pip -e)",
+    "msg_start_update_all": "\n--- Initializing bulk update ---",
+    "msg_start_freeze": "\n--- Starting asynchronous export (Freeze) ---",
+    "err_core_missing": "❌ CRITICAL ERROR: 'core' object is missing. Update aborted."
 
 }

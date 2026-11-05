@@ -96,10 +96,10 @@ class AptListener:
         return norm_name, extras
 
     @staticmethod
-    def _extract_packages_from_install_cmd(cmd_list: list[str]) -> list[tuple[str, list[str]]]:
+    def _extract_packages_from_install_cmd(cmd_list: list[str]) -> list[tuple[str, str, list[str]]]:
         """
-        Prejde argumenty príkazu install, preskočí prepínače CLI inštalátora
-        a každý inštalačný cieľ pošle na extrakciu.
+        Vráti zoznam trojíc: (normalizovaný_názov, plná_špecifikácia_s_verziou, [extras])
+        Napríklad pre 'colorama==0.4.5' -> ('colorama', 'colorama==0.4.5', [])
         """
         items = []
         cmd_lower = [str(x).lower() for x in cmd_list]
@@ -113,7 +113,6 @@ class AptListener:
                     skip_next = False
                     continue
 
-                # Preskočíme prepínače, ktoré očakávajú hodnotu v ďalšom argumente
                 if arg_str.startswith("-"):
                     if arg_str in ("--python", "-p", "--target", "-t", "--prefix", "-c", "--constraint", "-r", "--requirement"):
                         skip_next = True
@@ -121,7 +120,7 @@ class AptListener:
 
                 pkg_name, extras = AptListener._extract_package_and_extras_from_arg(arg_str)
                 if pkg_name and pkg_name not in AptLogic.CORE_TOOLS:
-                    items.append((pkg_name, extras))
+                    items.append((pkg_name, arg_str, extras))
         return items
 
     @staticmethod
@@ -177,17 +176,22 @@ class AptListener:
                 is_req_install = "install" in cmd_lower and "-r" in cmd_lower
                 is_version_change = any("==" in str(arg) or "<" in str(arg) or ">" in str(arg) for arg in cmd_list)
 
-                # ŽIVÁ APT KONTROLA pred povolením odinštalácie (zahŕňa aj 5. stav Linkera)
-                if is_uninstall:
-                    pkgs_to_uninstall = AptListener._extract_packages_from_uninstall_cmd(cmd_list, include_core=True)
-                    for pkg in pkgs_to_uninstall:
-                        is_safe, err_msg = AptLogic.verify_uninstall_safety(worker.venv_path, core, pkg)
-                        if not is_safe:
-                            log_widget.append(err_msg)
-                            worker.success = False
-                            if hasattr(worker, 'finished'):
-                                worker.finished.emit(1)
-                            elif hasattr(worker, 'signals') and hasattr(worker.signals, 'finished'):
+                # ŽIVÁ APT KONTROLA PRED INŠTALÁCIOU (STAV 1:1)
+                if "install" in cmd_lower and not is_req_install and not is_upgrade:
+                    installed_items_check = AptListener._extract_packages_from_install_cmd(cmd_list)
+                    if installed_items_check:
+                        from PyQt6.QtWidgets import QApplication
+                        log_widget.append(AptListener._tr("apt_verifying_reqs", "\n🔍 [APT] Overujem požiadavku voči prostrediu..."))
+                        QApplication.processEvents()
+
+                        can_skip, skip_msg = AptLogic.check_install_necessity(
+                            worker.venv_path, core, installed_items_check, log_callback=log_widget.append
+                        )
+                        if can_skip:
+                            log_widget.append(f"\n{skip_msg}")
+                            log_widget.append(AptListener._tr("apt_done_separator", "--- HOTOVO ---"))
+                            worker.success = True
+                            if hasattr(worker, 'signals') and hasattr(worker.signals, 'finished'):
                                 worker.signals.finished.emit()
                             return
 
@@ -241,7 +245,7 @@ class AptListener:
 
                     # 2. Pri inštalácii: registrácia explicit a extras väzieb
                     if not is_upgrade and not is_req_install:
-                        for pkg, extras in installed_items:
+                        for pkg, raw_spec, extras in installed_items:
                             if is_version_change and AptLogic.is_subpackage_or_managed(worker.venv_path, core, pkg):
                                 log_widget.append(AptListener._tr("apt_guard_subpackage_updated", "ℹ️ [APT: STAV 3 - GUARD] Verzia podbalíčka '{pkg}' upravená. Zostáva ako automatická závislosť (nie explicit).", pkg=pkg))
                             else:
@@ -340,7 +344,7 @@ class AptListener:
                     released_reqs.extend(kids)
 
                 if not is_upgrade and not is_req_install:
-                    for pkg, extras in installed_items:
+                    for pkg, raw_spec, extras in installed_items:
                         if is_version_change and AptLogic.is_subpackage_or_managed(self.venv_path, core, pkg):
                             self.log(AptListener._tr("apt_guard_subpackage_updated", "ℹ️ [APT: STAV 3 - GUARD] Verzia podbalíčka '{pkg}' upravená. Zostáva ako automatická závislosť (nie explicit).", pkg=pkg))
                         else:

@@ -11,8 +11,6 @@ from datetime import datetime
 
 from core._path import Paths
 from core.logic.language_manager import LanguageManager
-
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
 from windows.custom_message_box import CustomMessageBox
 
 
@@ -38,10 +36,6 @@ _MACHINE_ID_CACHE = None
 _MACHINE_ID_LOCK = threading.Lock()
 
 def get_machine_id():
-    """
-    Zistí hardvérový podpis jadra PC a zahashuje ho cez SHA-256.
-    Výsledok sa cachuje v pamäti (_MACHINE_ID_CACHE).
-    """
     global _MACHINE_ID_CACHE
     with _MACHINE_ID_LOCK:
         if _MACHINE_ID_CACHE is not None:
@@ -85,7 +79,6 @@ def is_system_venv(venv_path):
 
 
 def get_embedinstall_config_path():
-    """Vráti cestu k novému súboru, ktorý leží presne vedľa hlavného configu."""
     base_dir = os.path.dirname(Paths.get_config_file_path())
     return os.path.join(base_dir, "portable_system_py.json")
 
@@ -170,11 +163,6 @@ def _preload_cache_async():
 # =====================================================================
 
 def verify_access(venv_path):
-    """
-    Kľúčová kontrola: 
-    Vráti True -> Pusti akciu
-    Vráti False -> Zastav akciu (Je to Systémový Venv vytvorený v Portable na cudzom PC)
-    """
     if not venv_path: 
         return True
     if not is_portable_mode(): 
@@ -215,7 +203,6 @@ def show_blocked_warning(venv_name=""):
     except Exception:
         formatted_text = raw_text
         
-    # --- ZMENA NA NAŠU LIŠTU ---
     CustomMessageBox.critical(None, title, formatted_text)
 
 
@@ -390,68 +377,67 @@ class SystemListener:
         PortablePathLogic.check_and_repair_venv_if_needed = patched_repair
 
         # ==========================================
-        # 8. NAČÚVANIE PRIAMYCH PIP OPERÁCIÍ, FREEZE A MAZANIA
+        # 8. NAČÚVANIE PRIAMYCH PIP OPERÁCIÍ (*args, **kwargs poistka proti strate 'core')
         # ==========================================
         from core.logic.pip_manager import PipManager
         from core.logic.button.pip.freeze import FreezeHandler
-        from core.logic.button.manager.delete import DeleteHandler
 
         orig_pip_install = PipManager.install_package
         @staticmethod
-        def patched_pip_install(venv_path, package_name, log_widget, manager_type="pip"):
+        def patched_pip_install(venv_path, package_name, log_widget, manager_type="pip", *args, **kwargs):
             if not verify_access(venv_path):
                 show_blocked_warning(os.path.basename(venv_path))
                 if hasattr(log_widget, 'append'):
                     msg = LanguageManager.get("blocked_portability_system_venv", "🛑 Zablokované: Ochrana prenosnosti (Systémový Venv).")
                     log_widget.append(msg)
                 return
-            orig_pip_install(venv_path, package_name, log_widget, manager_type)
+            orig_pip_install(venv_path, package_name, log_widget, manager_type, *args, **kwargs)
         PipManager.install_package = patched_pip_install
 
         orig_pip_uninstall = PipManager.uninstall_package
         @staticmethod
-        def patched_pip_uninstall(venv_path, package_name, log_widget, manager_type="pip"):
+        def patched_pip_uninstall(venv_path, package_name, log_widget, manager_type="pip", *args, **kwargs):
             if not verify_access(venv_path):
                 show_blocked_warning(os.path.basename(venv_path))
                 if hasattr(log_widget, 'append'):
                     msg = LanguageManager.get("blocked_portability_system_venv", "🛑 Zablokované: Ochrana prenosnosti (Systémový Venv).")
                     log_widget.append(msg)
                 return
-            orig_pip_uninstall(venv_path, package_name, log_widget, manager_type)
+            orig_pip_uninstall(venv_path, package_name, log_widget, manager_type, *args, **kwargs)
         PipManager.uninstall_package = patched_pip_uninstall
 
         orig_pip_reqs = PipManager.install_requirements
         @staticmethod
-        def patched_pip_reqs(venv_path, project_root, log_widget, manager_type="pip"):
+        def patched_pip_reqs(venv_path, project_root, log_widget, manager_type="pip", *args, **kwargs):
             if not verify_access(venv_path):
                 show_blocked_warning(os.path.basename(venv_path))
                 if hasattr(log_widget, 'append'):
                     msg = LanguageManager.get("blocked_portability_system_venv", "🛑 Zablokované: Ochrana prenosnosti (Systémový Venv).")
                     log_widget.append(msg)
                 return
-            orig_pip_reqs(venv_path, project_root, log_widget, manager_type)
+            orig_pip_reqs(venv_path, project_root, log_widget, manager_type, *args, **kwargs)
         PipManager.install_requirements = patched_pip_reqs
 
         orig_pip_update_all = PipManager.update_all_packages
         @staticmethod
-        def patched_pip_update_all(venv_path, log_widget, manager_type="pip"):
+        def patched_pip_update_all(venv_path, log_widget, manager_type="pip", *args, **kwargs):
             if not verify_access(venv_path):
                 show_blocked_warning(os.path.basename(venv_path))
                 if hasattr(log_widget, 'append'):
                     msg = LanguageManager.get("blocked_portability_system_venv", "🛑 Zablokované: Ochrana prenosnosti (Systémový Venv).")
                     log_widget.append(msg)
                 return
-            orig_pip_update_all(venv_path, log_widget, manager_type)
+            orig_pip_update_all(venv_path, log_widget, manager_type, *args, **kwargs)
         PipManager.update_all_packages = patched_pip_update_all
 
         orig_freeze = FreezeHandler.run
         @staticmethod
-        def patched_freeze(venv_path, project_root, manager_type="pip", log_callback=None):
+        def patched_freeze(venv_path, project_root, manager_type="pip", log_callback=None, *args, **kwargs):
             if not verify_access(venv_path):
                 show_blocked_warning(os.path.basename(venv_path))
                 if log_callback:
                     msg = LanguageManager.get("blocked_portability_system_venv", "🛑 Zablokované: Ochrana prenosnosti (Systémový Venv).")
                     log_callback(msg)
                 return False
-            return orig_freeze(venv_path, project_root, manager_type, log_callback)
+            return orig_freeze(venv_path, project_root, manager_type, log_callback, *args, **kwargs)
         FreezeHandler.run = patched_freeze

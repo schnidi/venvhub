@@ -4,7 +4,7 @@
 
 import os
 from PyQt6.QtWidgets import (QDialog, QTableWidgetItem, QHeaderView, QVBoxLayout, 
-                             QWidget, QMessageBox)
+                             QWidget)
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QThread, pyqtSlot, pyqtSignal
 
@@ -13,10 +13,9 @@ from windows.pip_package_widget import PipPackageWidget
 
 from core.logic.button.pip.pip_list_worker import PipListWorker 
 from core.logic.button.pip.pip_worker_allupdate import PipWorkerAllUpdate
-from core.logic.language_manager import LanguageManager
+from core.core_bridge import CoreBridge  # <--- NOVÝ PREKLADACÍ SYSTÉM (State Enum)
 
 from windows.custom_title_bar import CustomTitleBar
-# --- PRIDANÝ IMPORT NAŠHO VLASTNÉHO OKNA ---
 from windows.custom_message_box import CustomMessageBox 
 
 
@@ -56,17 +55,17 @@ class PipManagerWindow(QDialog):
         # 1. Nastavíme okno bez rámov (Frameless)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         
-        # --- OPRAVA: Povolíme QSS rámček a definujeme presné meno pre CSS ---
+        # 2. Povolíme QSS rámček a definujeme presné meno pre CSS
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("PipManagerWindow")
         
         uic.loadUi(Paths.get_ui_file_path("pip_manager_window.ui"), self)
         
-        # 2. Vložíme Custom Title Bar
+        # 3. Vložíme Custom Title Bar
         self.title_bar = CustomTitleBar(self)
         self.main_layout.insertWidget(0, self.title_bar)
         
-        # --- OPRAVA: Vložíme 1px okraj, inak obsah okna prekryje QSS rámček ---
+        # 4. Vložíme 1px okraj, inak obsah okna prekryje QSS rámček
         self.main_layout.setContentsMargins(1, 1, 1, 1)
         
         self.lbl_header.setContentsMargins(0, 10, 0, 0)
@@ -75,7 +74,7 @@ class PipManagerWindow(QDialog):
         self.setup_ui()
         self.connect_signals()
         
-        # Aplikujeme preklady
+        # Aplikujeme preklady cez nový CoreBridge systém
         self.retranslate_ui()
         
         # Prvé načítanie dát
@@ -103,8 +102,8 @@ class PipManagerWindow(QDialog):
         self.actions_layout.addWidget(self.package_actions_widget)
 
     def retranslate_ui(self):
-        """Preloží hlavné okno a pošle signál aj do vnútorného widgetu."""
-        LanguageManager.translate_ui(self)
+        """Preloží hlavné okno a pošle signál aj do vnútorného widgetu (Nová Architektúra)."""
+        CoreBridge.translate_window(self)
         
         # !!! NAVŽDY VYMAZAŤ TEXT NA VONKAJŠOM RÁME !!!
         self.group_package_actions.setTitle("")
@@ -113,7 +112,7 @@ class PipManagerWindow(QDialog):
             self.title_bar.lbl_title.setText(self.windowTitle())
             
         venv_name = os.path.basename(self.venv_path)
-        fmt_header = LanguageManager.get("lbl_header_fmt", "Správca balíčkov pre: {0}")
+        fmt_header = CoreBridge.translate("lbl_header_fmt", "Správca balíčkov pre: {0}")
         self.lbl_header.setText(fmt_header.format(venv_name))
         
         # Preložíme vnútorný widget
@@ -121,10 +120,10 @@ class PipManagerWindow(QDialog):
             self.package_actions_widget.retranslate_ui()
 
         headers = [
-            LanguageManager.get("col_pkg_name", "Názov balíčka"),
-            LanguageManager.get("col_installed_ver", "Nainštalovaná verzia"),
-            LanguageManager.get("col_latest_ver", "Najnovšia verzia"),
-            "Akcie"
+            CoreBridge.translate("col_pkg_name", "Názov balíčka"),
+            CoreBridge.translate("col_installed_ver", "Nainštalovaná verzia"),
+            CoreBridge.translate("col_latest_ver", "Najnovšia verzia"),
+            CoreBridge.translate("col_actions", "Akcie")
         ]
         
         for i, text in enumerate(headers):
@@ -161,7 +160,7 @@ class PipManagerWindow(QDialog):
         self.group_package_actions.setTitle("")
         
         self.table_packages.setRowCount(1)
-        msg_loading = LanguageManager.get("msg_loading_pkgs", "🔄 Načítavam zoznam balíčkov, prosím čakajte...")
+        msg_loading = CoreBridge.translate("msg_loading_pkgs", "🔄 Načítavam zoznam balíčkov, prosím čakajte...")
         loading_item = QTableWidgetItem(msg_loading)
         loading_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         loading_item.setFlags(loading_item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
@@ -197,7 +196,7 @@ class PipManagerWindow(QDialog):
             
             if pkg['version'] != pkg['latest']:
                 item_latest.setForeground(Qt.GlobalColor.red)
-                tooltip = LanguageManager.get("tip_newer_version", "Dostupná novšia verzia!")
+                tooltip = CoreBridge.translate("tip_newer_version", "Dostupná novšia verzia!")
                 item_latest.setToolTip(tooltip)
             else:
                 item_latest.setForeground(Qt.GlobalColor.green)
@@ -205,7 +204,7 @@ class PipManagerWindow(QDialog):
             self.table_packages.setItem(row, 2, item_latest)
             self.table_packages.item(row, 0).setData(Qt.ItemDataRole.UserRole, pkg)
 
-        msg_success = LanguageManager.get("msg_loaded_count", "Úspešne načítaných {0} balíčkov.").format(len(packages))
+        msg_success = CoreBridge.translate("msg_loaded_count", "Úspešne načítaných {0} balíčkov.").format(len(packages))
         self.log_output.append(msg_success)
         self.set_buttons_enabled(True)
 
@@ -213,9 +212,8 @@ class PipManagerWindow(QDialog):
     def handle_load_error(self, error_message):
         self.table_packages.setRowCount(0)
         self.log_output.append(f"CHYBA: {error_message}")
-        title = LanguageManager.get("title_error_loading", "Chyba pri načítavaní")
+        title = CoreBridge.translate("title_error_loading", "Chyba pri načítavaní")
         
-        # --- ZMENA: POUŽITIE NÁŠHO VLASTNÉHO OKNA MIESTO KLASICKÉHO WINDOWS OKNA ---
         CustomMessageBox.critical(self, title, error_message)
         
         self.set_buttons_enabled(True)
@@ -242,7 +240,7 @@ class PipManagerWindow(QDialog):
     def on_update_all(self):
         self.safe_stop_thread()
         
-        msg_start = LanguageManager.get("msg_start_update_all", "\n--- Inicializujem hromadnú aktualizáciu ---")
+        msg_start = CoreBridge.translate("msg_start_update_all", "\n--- Inicializujem hromadnú aktualizáciu ---")
         self.log_output.append(msg_start)
         self.set_buttons_enabled(False)
         self._pending_refresh = False
@@ -250,11 +248,13 @@ class PipManagerWindow(QDialog):
         manager_type = self.parent().core.package_manager
 
         self.thread = QThread()
-        self.worker = PipWorkerAllUpdate(self.venv_path, manager_type)
+        # --- OPRAVA: Prepojenie objektu core (stratilo sa to tu)! ---
+        self.worker = PipWorkerAllUpdate(self.venv_path, manager_type, core=self.parent().core)
         self.worker.moveToThread(self.thread)
 
         self.worker.output_line.connect(self.append_log, Qt.ConnectionType.QueuedConnection)
-        self.worker.finished.connect(self.on_update_all_finished, Qt.ConnectionType.QueuedConnection)
+        # --- OPRAVA: Premenovanie signálu, aby Qt nerobilo Warningy ---
+        self.worker.finished.connect(self.handle_update_all_finished, Qt.ConnectionType.QueuedConnection)
         self.worker.error.connect(self.handle_update_error, Qt.ConnectionType.QueuedConnection)
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.cleanup_thread, Qt.ConnectionType.QueuedConnection)
@@ -269,20 +269,22 @@ class PipManagerWindow(QDialog):
     def handle_update_error(self, err_msg):
         self.log_output.append(f"CHYBA: {err_msg}")
 
+    # --- OPRAVA: Premenovaný slot na vymazanie warningu "connectSlotsByName" ---
     @pyqtSlot(bool)
-    def on_update_all_finished(self, success):
+    def handle_update_all_finished(self, success):
         if success:
-            msg = LanguageManager.get("msg_update_finished_refreshing", "Aktualizácia dokončená. Pripravujem obnovu zoznamu...")
+            msg = CoreBridge.translate("msg_update_finished_refreshing", "Aktualizácia dokončená. Pripravujem obnovu zoznamu...")
             self.log_output.append(msg)
             self._pending_refresh = True
         else:
-            msg = LanguageManager.get("msg_update_finished_error", "Aktualizácia skončila s chybou.")
+            msg = CoreBridge.translate("msg_update_finished_error", "Aktualizácia skončila s chybou.")
             self.log_output.append(msg)
             self.set_buttons_enabled(True)
 
     def on_freeze(self):
         self.safe_stop_thread() # Upraceme staré bežiace vlákna
-        self.log_output.append("\n--- Spúšťam asynchrónny export (Freeze) ---")
+        msg_start = CoreBridge.translate("msg_start_freeze", "\n--- Spúšťam asynchrónny export (Freeze) ---")
+        self.log_output.append(msg_start)
         self.set_buttons_enabled(False)
         manager_type = self.parent().core.package_manager
 
@@ -294,14 +296,17 @@ class PipManagerWindow(QDialog):
         # Prepojenie signálov
         self.thread.started.connect(self.worker.run)
         self.worker.log_msg.connect(self.append_log, Qt.ConnectionType.QueuedConnection)
-        self.worker.finished_signal.connect(self.on_freeze_finished, Qt.ConnectionType.QueuedConnection)
+        
+        # --- OPRAVA: Premenovanie signálu, aby Qt nerobilo Warningy ---
+        self.worker.finished_signal.connect(self.handle_freeze_finished, Qt.ConnectionType.QueuedConnection)
         
         # Bezpečné uvoľnenie prostriedkov po dokončení
         self.worker.finished_signal.connect(self.cleanup_thread)
         self.thread.start()
 
+    # --- OPRAVA: Premenovaný slot na vymazanie warningu "connectSlotsByName" ---
     @pyqtSlot(bool)
-    def on_freeze_finished(self, success):
+    def handle_freeze_finished(self, success):
         """Vyvolá sa na hlavnom grafickom vlákne po dokončení zápisu do requirements.txt."""
         self.set_buttons_enabled(True)
 

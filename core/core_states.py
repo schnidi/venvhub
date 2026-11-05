@@ -10,6 +10,7 @@ class CoreService(str, Enum):
     """Katalóg registrovaných služieb jadra."""
     IDE_PATHS = "IDE_PATHS"
     LANGUAGE = "LANGUAGE"
+    PACKAGE_UPDATE = "PACKAGE_UPDATE"
 
 class IDEType(str, Enum):
     """Typ editora."""

@@ -446,7 +446,6 @@
     "vscode_sync_err_no_local_root": "❌ ОШИБКА: путь к локальным пакетам не указан",
     "vscode_sync_err_no_project": "❌ ОШИБКА: путь к проекту не указан",
     "vscode_sync_err_project_missing": "❌ ОШИБКА: путь к проекту не существует: {path}",
-    "vscode_sync_err_read": "❌ Ошибка при чтении {path}: {error}",
     "vscode_sync_found_items": "     Найдено {tasks} задач и {keys} комбинаций клавиш.",
     "vscode_sync_keys_exist": "ℹ️ Файл keybindings.json уже существует, содержит {count} комбинаций клавиш.",
     "vscode_sync_keys_new": "ℹ️ Файл keybindings.json не существует, создаю новый.",
@@ -850,5 +849,38 @@
 
     "apt_install_already_in_req_extras": "ℹ️ Пакет '{0}' уже предоставлен через requirements.txt (как extra для '{1}') и установлен. Установка пропущена.",
     "apt_linker_module_tag": "{mod} (Локальный модуль)",
-    "apt_err_state_save_failed": "Не удалось записать venvhub_apt_state.json."
+    "apt_err_state_save_failed": "Не удалось записать venvhub_apt_state.json.",
+
+    "apt_requirements_sync_start": "\n--- Инициализация требований из requirements.txt (APT) ---",
+    "apt_requirements_sync_fail": "⚠️ Синхронизация требований не удалась.",
+    "err_ide_not_found": "Редактор {0} не найден в системе или на съемном диске.",
+    "msg_uv_missing_for_active": "Утилита 'uv' не найдена для активного Python ({0}).\n\nЕсли вы хотите использовать установщик UV, сначала установите его в активное окружение,\nили настройте системную переменную PATH в Windows.",
+
+    "apt_checking_deps": "--- Выполнение проверки зависимостей {0}... ---",
+    "apt_deps_compatible": "✅ Все зависимости совместимы.",
+    "apt_deps_conflicts": "⚠️ [{0} Check] Обнаружены конфликты зависимостей:\n{1}",
+
+    "apt_install_already_present_env": "ℹ️ Пакет '{0}' уже установлен в этой среде. Установка не требуется.",
+    "clone_install_build_tools": "🛠 Обеспечиваю инструменты сборки (setuptools, wheel)...",
+    "clone_editable_pkgs": "Устанавливаю редактируемые пакеты (pip -e)...",
+    "clone_done_success": "✅ Клонирование успешно завершено!",
+    "pipe_log_build_tools": "🛠 [PIP] Обеспечиваю инструменты сборки (setuptools, wheel)...",
+    "pipe_log_build_tools_failed": "⚠️ Подготовка инструментов сборки не удалась, продолжаю...",
+    "pip_e_ext_installed": "ℹ️ Все внешние зависимости PIP уже установлены в venv.",
+
+    "update_apt_start": "\n🔄 [APT UPDATE] Инициализация умного обновления...",
+    "update_step1": "📦 Шаг 1: Обновление ядра пакетного менеджера...",
+    "update_step2": "🔍 Шаг 2: Поиск устаревших пакетов в сети...",
+    "update_step3": "🧠 Шаг 3: Применение правил и ограничений APT...",
+    "update_step4": "🚀 Шаг 4: Загрузка и обновление {0} разрешенных пакетов: {1}",
+    "update_step5": "\n🧹 Шаг 5: Передача управления ядру APT (Diff, Autoremove и интегральная проверка)...",
+    "update_all_latest": "✅ Все пакеты в данный момент обновлены до последних версий.",
+    "update_err_download": "❌ Ошибка при загрузке обновлений.",
+    "update_all_protected": "ℹ️ Все устаревшие пакеты защищены правилами APT. Загрузка пропущена.",
+    "update_protect_req": "   🛡️ Защита: Пропуск '{0}' (Версия жестко зафиксирована в requirements.txt: {1})",
+    "update_protect_linker": "   🔗 Защита: Пропуск '{0}' (Управляется локальным модулем разработки Linker)",
+    "update_protect_pipe": "   ✏️ Защита: Пропуск '{0}' (Локальный редактируемый пакет pip -e)",
+    "msg_start_update_all": "\n--- Инициализация массового обновления ---",
+    "msg_start_freeze": "\n--- Запуск асинхронного экспорта (Freeze) ---",
+    "err_core_missing": "❌ КРИТИЧЕСКАЯ ОШИБКА: Отсутствует объект 'core'. Обновление прервано."
 }
