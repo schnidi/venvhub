@@ -10,6 +10,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
+from core.core_bridge import CoreBridge
 from core.logic.language_manager import LanguageManager
 from windows.progress_dialog import ProgressDialog
 from core._path import Paths
@@ -21,7 +22,6 @@ from core.logic.sluzby.log_print_desktop import DesktopLogger
 from core.logic.sluzby.embed_python_created import EmbedPythonCreated
 from core.logic.sluzby.apt_logic import AptLogic
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
 from windows.custom_message_box import CustomMessageBox
 
 LOGGING_ENABLED = False
@@ -154,8 +154,6 @@ class VenvCreatorWorker(QObject):
                     creationflags=CREATE_NO_WINDOW
                 )
                 if tools_result.returncode != 0:
-                    # Nie je fatálne (napr. offline), ale snímka systémových balíčkov
-                    # zachytí len to, čo na disku naozaj je.
                     create_logger.write(f"UPOZORNENIE: setuptools/wheel sa nenainštalovali:\n{tools_result.stderr}")
                     self.progress_log.emit(
                         LanguageManager.get(
@@ -174,7 +172,6 @@ class VenvCreatorWorker(QObject):
                 snapshot = AptLogic.snapshot_system_packages(self.venv_path)
                 create_logger.write(f"SYSTÉMOVÉ BALÍČKY: {snapshot}")
             except Exception as snap_err:
-                # Nie je fatálne: pri prvom použití APT sa snímka odhadne z CORE_TOOLS.
                 create_logger.write(f"UPOZORNENIE: snímku systémových balíčkov sa nepodarilo zapísať: {snap_err}")
 
             # Rodný list generujeme priamo tu na pozadí!
@@ -194,6 +191,9 @@ class VenvCreatorWorker(QObject):
                 source_python_path=self.parent_py_path,
             )
             BirthCertificateGenerator.update_venv_certificate(self.venv_path)
+
+            # 👉 EVIDENCIA PRE OCHRANU PRENOSNOSTI (PORTABILITY GUARD)
+            CoreBridge.register_venv_creation(self.venv_path, self.parent_py_path)
 
             self.progress_log.emit(
                 LanguageManager.get(
@@ -221,7 +221,6 @@ class CreateVenvHandler:
     @staticmethod
     def run(parent, core, py_list):
         if not core.active_project:
-            # --- ZMENA NA NAŠU LIŠTU ---
             CustomMessageBox.warning(
                 parent,
                 LanguageManager.get("title_error", "Chyba"),
@@ -246,7 +245,6 @@ class CreateVenvHandler:
         full_path = Paths.get_venv_path(core.venv_hub_root, folder_name)
 
         if os.path.exists(full_path):
-            # --- ZMENA NA NAŠU LIŠTU ---
             CustomMessageBox.warning(
                 parent,
                 LanguageManager.get("title_error", "Chyba"),
@@ -316,7 +314,6 @@ class CreateVenvHandler:
                     project_path, full_path
                 )
             except Exception as e:
-                # --- ZMENA NA NAŠU LIŠTU ---
                 CustomMessageBox.critical(
                     parent,
                     LanguageManager.get("title_vscode_error", "Chyba VS Code"),
@@ -330,7 +327,6 @@ class CreateVenvHandler:
 
         def on_error(msg):
             progress_dialog.reject()
-            # --- ZMENA NA NAŠU LIŠTU ---
             CustomMessageBox.critical(
                 parent,
                 LanguageManager.get("title_error", "Chyba"),

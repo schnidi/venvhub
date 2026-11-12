@@ -84,8 +84,19 @@ class QuickSettingsWindow(QWidget):
             log.append(msg)
             return
         if pkg: 
-            PipManager.install_package(self.core.active_venv_path, pkg, log, self.core.package_manager)
+            self.btn_pip_install.setEnabled(False)
+            PipManager.install_package(
+                self.core.active_venv_path, 
+                pkg, 
+                log, 
+                self.core.package_manager, 
+                core=self.core  # <--- DOPLNENÉ core
+            )
             self.edit_pip_pkg.clear()
+            if PipManager._current_worker:
+                PipManager._current_worker.signals.finished_with_status.connect(
+                    lambda status: self.btn_pip_install.setEnabled(True)
+                )
 
     def populate_panel(self):
         self.combo_project.blockSignals(True)

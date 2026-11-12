@@ -29,8 +29,8 @@ from core.logic.pyqt_to_pyside import setup_qt_environment
 # TOTO MUSÍ ZBEHNÚŤ AKO PRVÉ PRED AKÝMKOĽVEK IMPORTOM Z PYQT
 setup_qt_environment()
 
-from core.logic.system_listener import SystemListener
-SystemListener.start_listening()
+#from core.logic.system_listener import SystemListener
+#SystemListener.start_listening()
 
 # --- ŠTART 2s SCANNERA PRE VS CODE & CURSOR ---
 from core.logic.ide_detector import IDEDetector
@@ -112,8 +112,8 @@ def main():
 
     core = ProjectCore()
 
-    from core.logic.sluzby.apt_listener import AptListener
-    AptListener.start_listening(core)
+    #from core.logic.sluzby.apt_listener import AptListener
+    #AptListener.start_listening(core)
     
     if core.active_theme and core.active_theme != "default":
         SkinManager.apply_skin(core.active_theme)

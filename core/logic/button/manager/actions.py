@@ -8,6 +8,7 @@ import psutil
 from core.logic.process_registry import process_registry
 from core._path import Paths
 from core.logic.containers.logic.check_multi_venv import MultiVenvChecker
+from core.core_bridge import CoreBridge
 
 CREATE_NO_WINDOW = 0x08000000
 CREATE_NEW_CONSOLE = 0x00000010
@@ -20,26 +21,6 @@ class ActionHandler:
 
     @staticmethod
     def _build_run_bat(project_path: str, activate_bat: str, script_to_run: str = None) -> str:
-        """
-        Vygeneruje krátky dočasný .bat súbor, ktorý prepne priečinok, aktivuje
-        venv a (voliteľne) spustí skript.
-
-        OPRAVA: Pôvodne sa celý príkaz skladal ako jeden re-quotovaný string
-        pre 'cmd.exe /k "...&&...&&..."'. Pri viacerých "&&" a vnorených
-        úvodzovkách cmd.exe interpretuje úvodzovky špeciálnym (a nepríjemným)
-        spôsobom - keď je v príkazovom riadku viac než presne 2 úvodzovky,
-        odstráni iba prvú a poslednú z celého reťazca a zvyšok parsuje
-        doslovne. Výsledkom bolo, že oba "&&" skončili "vo vnútri" úvodzovkového
-        bloku a neboli braté ako oddeľovače príkazov - cmd.exe sa tak pokúšal
-        spustiť "cd" s jednou dlhou nezmyselnou "cestou" zlepenou z project_path
-        + activate_bat + script, čo viedlo k "The system cannot find the path
-        specified" úplne nezávisle od toho, aký projekt bol zvolený.
-
-        Tým, že namiesto skladania jedného komplikovaného príkazu vygenerujeme
-        .bat súbor (kde je každý riadok samostatný príkaz a quotovanie je
-        triviálne - jedna cesta = jedny úvodzovky), sa tomuto problému úplne
-        vyhneme.
-        """
         fd, bat_path = tempfile.mkstemp(suffix=".bat", prefix="venvhub_run_")
         with os.fdopen(fd, "w", encoding="mbcs") as f:
             f.write("@echo off\r\n")
@@ -53,6 +34,7 @@ class ActionHandler:
     def start_terminal_process(project_path: str, venv_path: str, script_to_run: str):
         """Univerzálna funkcia na spustenie procesu v novom termináli."""
         if not all([project_path, venv_path, script_to_run]): return
+        if not CoreBridge.verify_venv_access(venv_path): return
 
         process_registry.cleanup_dead_processes(venv_path)
         if process_registry.is_running(venv_path):
@@ -61,18 +43,19 @@ class ActionHandler:
 
         activate_bat = Paths.get_venv_activate_bat_path(venv_path)
 
-        # --- OPRAVA: pôvodný riadok nahradený generovaním .bat súboru ---
-        # cmd = f'cmd.exe /k ""cd /d "{project_path}" && "{activate_bat}" && python "{script_to_run}"""'
         bat_path = ActionHandler._build_run_bat(project_path, activate_bat, script_to_run)
         cmd = f'cmd.exe /k "{bat_path}"'
 
         process = subprocess.Popen(cmd, creationflags=CREATE_NEW_CONSOLE)
+        
+        # ---> OPRAVA: TOTO TU CHÝBALO! ZAREGISTROVANIE PROCESU <---
         process_registry.register(venv_path, pid=process.pid, process_type='terminal')
 
     @staticmethod
     def start_silent_process(project_path: str, venv_path: str, script_to_run: str):
         """Univerzálna funkcia na spustenie procesu na pozadí."""
         if not all([project_path, venv_path, script_to_run]): return
+        if not CoreBridge.verify_venv_access(venv_path): return
 
         process_registry.cleanup_dead_processes(venv_path)
         if process_registry.is_running(venv_path):
@@ -90,11 +73,10 @@ class ActionHandler:
     def open_terminal_only(project_path: str, venv_path: str):
         """Univerzálna funkcia na otvorenie aktivovaného terminálu."""
         if not all([project_path, venv_path]): return
+        if not CoreBridge.verify_venv_access(venv_path): return
 
         activate_bat = Paths.get_venv_activate_bat_path(venv_path)
 
-        # --- OPRAVA: pôvodný riadok nahradený generovaním .bat súboru ---
-        # cmd = f'cmd.exe /k ""cd /d "{project_path}" && "{activate_bat}"""'
         bat_path = ActionHandler._build_run_bat(project_path, activate_bat, script_to_run=None)
         cmd = f'cmd.exe /k "{bat_path}"'
 

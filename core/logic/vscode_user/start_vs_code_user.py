@@ -27,6 +27,11 @@ class VSCodeLauncher:
         if not project_path or not os.path.exists(project_path):
             return False, LanguageManager.get("err_project_path_not_exist", "Cesta k projektu neexistuje.")
 
+        # 0. KONTROLA PRENOSNOSTI PRE VENV
+        if venv_path and not CoreBridge.verify_venv_access(venv_path):
+            blocked_msg = CoreBridge.translate("blocked_by_portability", "Zablokované ochranou prenosnosti.")
+            return False, blocked_msg
+
         # 1. Zosynchronizujeme predvolený Venv pre projekt
         if venv_path and os.path.exists(venv_path):
             VSCodeIntegration.set_default_interpreter(project_path, venv_path)
@@ -36,7 +41,7 @@ class VSCodeLauncher:
         users_root = getattr(core, "vscode_users_root", "")
         active_user_id = core.get_active_ide_user() if hasattr(core, "get_active_ide_user") else getattr(core, "active_vscode_user", "")
 
-        # 👉 2. Získanie kompletného overeného stavu z nízkoúrovňovej služby cez CoreBridge
+        # 2. Získanie kompletného overeného stavu z nízkoúrovňovej služby cez CoreBridge
         ide_state = CoreBridge.get_ide_state(
             ide_type=active_ide,
             portable_path=portable_path,
@@ -62,7 +67,7 @@ class VSCodeLauncher:
         else:
             dispatcher = VSCodeCommandDispatcher(custom_executable=executable)
 
-        # 👉 4. Blesková poistka pred spustením (kontrola rozšírení z balíčkov)
+        # 4. Blesková poistka pred spustením (kontrola rozšírení z balíčkov)
         AptIDELogic.verify_and_heal_profile_on_launch(core, venv_path, dispatcher)
 
         # 5. Poskladanie finálneho príkazu cez príslušný dispečer

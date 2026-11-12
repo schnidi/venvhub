@@ -64,6 +64,10 @@ class UvCommandDispatcher:
             "list_json": lambda **kwargs: 
                 self.uv_base + ["list", "--format=json"] + self.python_arg,
 
+            # --- NOVÉ PRE EDITABLE SERVICE ---
+            "list_editable_json": lambda **kwargs: 
+                self.uv_base + ["list", "--editable", "--format=json"] + self.python_arg,
+
             "list_outdated": lambda **kwargs: 
                 self.uv_base + ["list", "--outdated"] + self.python_arg,
 

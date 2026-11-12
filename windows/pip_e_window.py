@@ -1,18 +1,20 @@
 #----------------------------------------
 # Súbor: windows/pip_e_window.py
+# Moderné okno pre správu pip -e balíčkov napojené na CoreBridge a PipManager
 #----------------------------------------
 
 import os
-from PyQt6.QtWidgets import (QDialog, QTableWidgetItem, QHeaderView,
-                             QMessageBox, QFileDialog)
+from PyQt6.QtWidgets import QDialog, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QThread, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSlot
 
 from core._path import Paths
-from core.logic.language_manager import LanguageManager
-from windows.custom_title_bar import CustomTitleBar
+from core.core_bridge import CoreBridge
+from core.core_states import EditableOperationStatus
+from core.logic.pip_manager import PipManager
 
-from core.logic.pip_e import PipEListWorker, PipEInstallWorker, PipEUninstallWorker
+from windows.custom_title_bar import CustomTitleBar
+from windows.custom_message_box import CustomMessageBox
 
 
 class PipEWindow(QDialog):
@@ -21,16 +23,14 @@ class PipEWindow(QDialog):
         self.core = parent.core
         self.venv_path = venv_path
 
-        self.active_thread = None
-        self.active_worker = None
-        self._pending_refresh = False
-
+        # 1. Frameless nastavenia okna
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("PipEWindow")
 
         uic.loadUi(Paths.get_ui_file_path("pip_e_window.ui"), self)
 
+        # 2. Vloženie CustomTitleBar
         self.title_bar = CustomTitleBar(self)
         self.main_layout.insertWidget(0, self.title_bar)
         self.main_layout.setContentsMargins(1, 1, 1, 1)
@@ -39,6 +39,7 @@ class PipEWindow(QDialog):
         self.connect_signals()
         self.retranslate_ui()
 
+        # 3. Načítanie zoznamu balíčkov pri štarte
         self.refresh_list()
 
     def setup_ui(self):
@@ -48,25 +49,25 @@ class PipEWindow(QDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
 
     def retranslate_ui(self):
-        LanguageManager.translate_ui(self)
+        CoreBridge.translate_window(self)
 
-        self.table_packages.horizontalHeaderItem(0).setText(LanguageManager.get("col_pipe_name", "Názov balíčka"))
-        self.table_packages.horizontalHeaderItem(1).setText(LanguageManager.get("col_pipe_version", "Verzia"))
-        self.table_packages.horizontalHeaderItem(2).setText(LanguageManager.get("col_pipe_path", "Lokálna cesta"))
+        self.table_packages.horizontalHeaderItem(0).setText(CoreBridge.translate("col_pipe_name", "Názov balíčka"))
+        self.table_packages.horizontalHeaderItem(1).setText(CoreBridge.translate("col_pipe_version", "Verzia"))
+        self.table_packages.horizontalHeaderItem(2).setText(CoreBridge.translate("col_pipe_path", "Lokálna cesta"))
 
         if hasattr(self, 'title_bar'):
-            self.title_bar.lbl_title.setText(LanguageManager.get("title_pip_e_manager", "Editovateľné balíčky (pip -e)"))
+            self.title_bar.lbl_title.setText(CoreBridge.translate("title_pip_e_manager", "Editovateľné balíčky (pip -e)"))
 
         venv_name = os.path.basename(self.venv_path)
-        self.lbl_header.setText(LanguageManager.get("pip_e_header", "Inštalované cez pip -e pre: {name}").format(name=venv_name))
+        fmt = CoreBridge.translate("pip_e_header", "Inštalované cez pip -e pre: {name}")
+        self.lbl_header.setText(fmt.format(name=venv_name))
 
     def connect_signals(self):
         self.btn_refresh.clicked.connect(self.refresh_list)
         self.btn_add_package.clicked.connect(self.add_new_package)
         self.btn_remove_package.clicked.connect(self.remove_selected_package)
 
-    @pyqtSlot(str)
-    def log(self, message):
+    def log(self, message: str):
         self.log_output.append(message)
         scrollbar = self.log_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -78,59 +79,22 @@ class PipEWindow(QDialog):
         self.table_packages.setEnabled(not locked)
 
     # =========================================================================
-    # --- SPRÁVA VLÁKNA (bez wait() v GUI vlákne) ---
-    # =========================================================================
-    def _is_busy(self) -> bool:
-        return self.active_thread is not None
-
-    def _start_worker(self, worker, on_finished):
-        """Spustí worker v novom vlákne. Vlákno sa po dokončení samo uprace."""
-        if self._is_busy():
-            return
-
-        self._set_ui_locked(True)
-
-        thread = QThread()
-        worker.moveToThread(thread)
-
-        thread.started.connect(worker.run)
-        worker.log_msg.connect(self.log)
-        worker.error.connect(self._handle_error)
-        worker.finished.connect(on_finished)
-
-        # Upratovanie: worker skončí -> thread.quit -> deleteLater oboch
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._on_thread_finished)
-
-        self.active_thread = thread
-        self.active_worker = worker
-        thread.start()
-
-    @pyqtSlot()
-    def _on_thread_finished(self):
-        """Vlákno je naozaj dokončené – až teraz sa dá spustiť ďalšie."""
-        self.active_thread = None
-        self.active_worker = None
-        if self._pending_refresh:
-            self._pending_refresh = False
-            self.refresh_list()
-
-    # =========================================================================
-    # --- AKCIA 1: NAČÍTANIE ZOZNAMU ---
+    # 1. NAČÍTANIE ZOZNAMU CEZ FASÁDU
     # =========================================================================
     def refresh_list(self):
-        if self._is_busy():
-            self._pending_refresh = True
-            return
-
+        self._set_ui_locked(True)
         self.table_packages.setRowCount(0)
+        
         manager_type = getattr(self.core, 'package_manager', 'pip')
-        self._start_worker(PipEListWorker(self.venv_path, manager_type), self._on_list_loaded)
+        PipManager.list_editable_packages(
+            venv_path=self.venv_path,
+            manager_type=manager_type,
+            on_loaded=self._on_list_loaded,
+            log_widget=self.log_output
+        )
 
     @pyqtSlot(list)
-    def _on_list_loaded(self, packages):
+    def _on_list_loaded(self, packages: list):
         self.table_packages.setRowCount(0)
 
         for pkg in packages:
@@ -151,82 +115,98 @@ class PipEWindow(QDialog):
         self._set_ui_locked(False)
 
     # =========================================================================
-    # --- AKCIA 2: INŠTALÁCIA ---
+    # 2. INŠTALÁCIA Z PRIEČINKA CEZ FASÁDU
     # =========================================================================
     def add_new_package(self):
-        if self._is_busy():
-            return
-
         initial_dir = getattr(self.core, 'pip_e_packages_root', os.path.expanduser("~"))
         if not os.path.exists(initial_dir):
             initial_dir = os.path.expanduser("~")
 
-        dir_path = QFileDialog.getExistingDirectory(
-            self,
-            LanguageManager.get("title_select_pkg_dir", "Vybrať priečinok s balíčkom (setup.py / pyproject.toml)"),
-            initial_dir
-        )
+        title = CoreBridge.translate("title_select_pkg_dir", "Vybrať priečinok s balíčkom (setup.py / pyproject.toml)")
+        dir_path = QFileDialog.getExistingDirectory(self, title, initial_dir)
         if not dir_path:
             return
 
+        self._set_ui_locked(True)
         manager_type = getattr(self.core, 'package_manager', 'pip')
-        self._start_worker(
-            PipEInstallWorker(self.venv_path, dir_path, manager_type),
-            self._on_action_finished
+
+        PipManager.install_editable(
+            core=self.core,
+            venv_path=self.venv_path,
+            target_path=dir_path,
+            log_widget=self.log_output,
+            manager_type=manager_type
         )
 
+        if PipManager._current_worker:
+            PipManager._current_worker.signals.finished_with_status.connect(self._on_operation_finished)
+
     # =========================================================================
-    # --- AKCIA 3: ODINŠTALÁCIA ---
+    # 3. ODINŠTALÁCIA S APT OCHRANOU CEZ FASÁDU
     # =========================================================================
     def remove_selected_package(self):
-        if self._is_busy():
-            return
-
         selected_row = self.table_packages.currentRow()
         if selected_row == -1:
-            QMessageBox.warning(
+            CustomMessageBox.warning(
                 self,
-                LanguageManager.get("title_warning", "Upozornenie"),
-                LanguageManager.get("pip_e_select_to_remove", "Najprv kliknite na balíček v tabuľke, ktorý chcete odinštalovať.")
+                CoreBridge.translate("title_warning", "Upozornenie"),
+                CoreBridge.translate("pip_e_select_to_remove", "Najprv kliknite na balíček v tabuľke, ktorý chcete odinštalovať.")
             )
             return
 
         pkg_name = self.table_packages.item(selected_row, 0).text()
 
-        confirm = QMessageBox.question(
-            self,
-            LanguageManager.get("title_confirm", "Potvrdenie"),
-            LanguageManager.get("pip_e_uninstall_confirm", "Naozaj chcete odinštalovať editovateľný balíček '{0}' z tohto venv?").format(pkg_name),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if confirm == QMessageBox.StandardButton.No:
+        title = CoreBridge.translate("title_confirm", "Potvrdenie")
+        msg = CoreBridge.translate("pip_e_uninstall_confirm", "Naozaj chcete odinštalovať editovateľný balíček '{0}' z tohto venv?").format(pkg_name)
+        
+        reply = CustomMessageBox.question(self, title, msg)
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
+        self._set_ui_locked(True)
         manager_type = getattr(self.core, 'package_manager', 'pip')
-        self._start_worker(
-            PipEUninstallWorker(self.venv_path, pkg_name, manager_type),
-            self._on_action_finished
+
+        PipManager.uninstall_editable(
+            core=self.core,
+            venv_path=self.venv_path,
+            package_name=pkg_name,
+            log_widget=self.log_output,
+            manager_type=manager_type
         )
 
-    # =========================================================================
-    # --- CHYBY A DOKONČENIE ---
-    # =========================================================================
-    @pyqtSlot(str)
-    def _handle_error(self, err_msg):
-        self.log(err_msg)
-        QMessageBox.critical(self, LanguageManager.get("title_error", "Chyba"), err_msg)
+        if PipManager._current_worker:
+            PipManager._current_worker.signals.finished_with_status.connect(self._on_operation_finished)
 
-    @pyqtSlot(bool)
-    def _on_action_finished(self, success):
-        if not success:
-            self._set_ui_locked(False)
-            return
-        # Zoznam sa obnoví hneď po tom, ako sa vlákno skutočne ukončí
-        self._pending_refresh = True
+    # =========================================================================
+    # 4. VYHODNOTENIE STAVOVÉHO ENUMU (EditableOperationStatus)
+    # =========================================================================
+    @pyqtSlot(EditableOperationStatus)
+    def _on_operation_finished(self, status: EditableOperationStatus):
+        self._set_ui_locked(False)
 
-    def done(self, result):
-        """Pri zatváraní okna počkaj na bežiace vlákno, aby nepadol Qt."""
-        if self.active_thread is not None and self.active_thread.isRunning():
-            self.active_thread.quit()
-            self.active_thread.wait(5000)
-        super().done(result)
+        if status in (EditableOperationStatus.SUCCESS, EditableOperationStatus.SUCCESS_WITH_CONFLICTS):
+            self.refresh_list()
+            if status == EditableOperationStatus.SUCCESS_WITH_CONFLICTS:
+                CustomMessageBox.warning(
+                    self,
+                    CoreBridge.translate("title_warning", "Upozornenie"),
+                    CoreBridge.translate("msg_installed_with_conflicts", "Balíček bol nainštalovaný, ale boli zistené konflikty v závislostiach.\nSkontrolujte log.")
+                )
+        elif status == EditableOperationStatus.INVALID_PROJECT:
+            CustomMessageBox.warning(
+                self,
+                CoreBridge.translate("title_warning", "Neplatný projekt"),
+                CoreBridge.translate("pipe_err_invalid_folder", "Vybraný priečinok neobsahuje súbor 'setup.py' ani 'pyproject.toml'.")
+            )
+        elif status == EditableOperationStatus.BLOCKED:
+            CustomMessageBox.warning(
+                self,
+                CoreBridge.translate("title_warning", "Zablokované"),
+                CoreBridge.translate("msg_op_blocked", "Operácia bola zablokovaná systémovou ochranou (APT Guard).\nSkontrolujte log pre viac informácií.")
+            )
+        elif status == EditableOperationStatus.ERROR:
+            CustomMessageBox.critical(
+                self,
+                CoreBridge.translate("title_error", "Chyba"),
+                CoreBridge.translate("msg_check_log", "Operácia zlyhala. Skontrolujte log pre viac detailov.")
+            )

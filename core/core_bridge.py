@@ -73,7 +73,13 @@ class CoreBridge:
         registered = []
 
         # Zoznam služieb, ktoré sú zámerne typu LAZY (načítavajú sa na požiadanie)
-        lazy_services = {CoreService.PACKAGE_UPDATE}
+        lazy_services = {
+            CoreService.PACKAGE_UPDATE, 
+            CoreService.PACKAGE_OPERATIONS, 
+            CoreService.EDITABLE_OPERATIONS,
+            CoreService.LOCAL_LINKER,
+            CoreService.PORTABILITY_GUARD,  
+        }
         
         for service_enum in CoreService:
             if service_enum in cls._services:
@@ -140,7 +146,7 @@ class CoreBridge:
     # LAZY SLUŽBA PRE AKTUALIZÁCIU BALÍČKOV (PACKAGE_UPDATE)
     # =========================================================================
     @classmethod
-    def get_package_update_service(cls):
+    def _get_package_update_service(cls):
         """
         Lazy-loader: Služba sa importuje a zaregistruje do centrálneho registra
         AŽ VTEDY, keď je prvýkrát vyžiadaná. Využíva register_service.
@@ -157,5 +163,121 @@ class CoreBridge:
         """
         Oficiálny mostík jadra pre spustenie celého cyklu Update All.
         """
-        service = cls.get_package_update_service()
+        service = cls._get_package_update_service()
         return service.update_all(venv_path, core, manager_type, log_callback)
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE INŠTALÁCIU / ODINŠTALÁCIU (PACKAGE_OPERATIONS)
+    # =========================================================================
+    @classmethod
+    def _get_package_operations_service(cls):
+        """
+        Lazy-loader: Služba pre inštaláciu a odinštalovanie balíčkov
+        sa importuje a registruje až pri prvom použití.
+        """
+        service = cls.get_service(CoreService.PACKAGE_OPERATIONS)
+        if service is None:
+            from core.logic.sluzby.venv.pack_inst_unis import PackageOperationsService
+            cls.register_service(CoreService.PACKAGE_OPERATIONS, PackageOperationsService)
+            service = PackageOperationsService
+        return service
+
+    @classmethod
+    def install_packages(cls, core, venv_path: str, packages: list[str], log_callback=print):
+        """
+        Oficiálny mostík jadra pre bezpečnú inštaláciu balíčkov s APT integráciou.
+        Vracia: PackageOperationStatus
+        """
+        service = cls._get_package_operations_service()
+        return service.install_packages(core, venv_path, packages, log_callback)
+
+    @classmethod
+    def uninstall_packages(cls, core, venv_path: str, packages: list[str], log_callback=print):
+        """
+        Oficiálny mostík jadra pre bezpečnú odinštaláciu balíčkov s vyčistením sirot.
+        Vracia: PackageOperationStatus
+        """
+        service = cls._get_package_operations_service()
+        return service.uninstall_packages(core, venv_path, packages, log_callback)
+
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE EDITOVATEĽNÉ BALÍČKY PIP -E (EDITABLE_OPERATIONS)
+    # =========================================================================
+    @classmethod
+    def _get_editable_operations_service(cls):
+        """
+        Lazy-loader: Služba pre editovateľné balíčky (pip -e)
+        sa importuje a registruje až pri prvom použití.
+        """
+        service = cls.get_service(CoreService.EDITABLE_OPERATIONS)
+        if service is None:
+            from core.logic.sluzby.venv.editable_service import EditableOperationsService
+            cls.register_service(CoreService.EDITABLE_OPERATIONS, EditableOperationsService)
+            service = EditableOperationsService
+        return service
+
+    @classmethod
+    def list_editable_packages(cls, venv_path: str, manager_type: str = "pip") -> list[dict]:
+        """Vráti zoznam nainštalovaných editovateľných balíčkov vo venv."""
+        service = cls._get_editable_operations_service()
+        return service.list_editable_packages(venv_path, manager_type)
+
+    @classmethod
+    def install_editable_package(cls, core, venv_path: str, target_path: str, log_callback=print):
+        """Inštaluje balíček v editovateľnom režime (pip -e) s APT analýzou. Vracia PackageOperationStatus."""
+        service = cls._get_editable_operations_service()
+        return service.install_editable_package(core, venv_path, target_path, log_callback)
+
+    @classmethod
+    def uninstall_editable_package(cls, core, venv_path: str, package_name: str, log_callback=print):
+        """Bezpečne odinštaluje editovateľný balíček s APT autoremove sirot. Vracia PackageOperationStatus."""
+        service = cls._get_editable_operations_service()
+        return service.uninstall_editable_package(core, venv_path, package_name, log_callback)
+
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE LOKÁLNY LINKER (LOCAL_LINKER)
+    # =========================================================================
+    @classmethod
+    def _get_local_linker_service(cls):
+        """
+        Lazy-loader: Služba pre lokálny linker balíčkov
+        sa importuje a registruje až pri prvom použití.
+        """
+        service = cls.get_service(CoreService.LOCAL_LINKER)
+        if service is None:
+            from core.logic.sluzby.venv.linker_service import LocalLinkerService
+            cls.register_service(CoreService.LOCAL_LINKER, LocalLinkerService)
+            service = LocalLinkerService
+        return service
+
+    @classmethod
+    def apply_local_links(cls, core, venv_path: str, selected_items: list[dict], log_callback=print):
+        """Oficiálny mostík jadra pre prepojenie lokálnych balíčkov VenvHub."""
+        service = cls._get_local_linker_service()
+        return service.apply_links(core, venv_path, selected_items, log_callback)
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE OCHRANU PRENOSNOSTI (PORTABILITY_GUARD)
+    # =========================================================================
+    @classmethod
+    def get_portability_guard_service(cls):
+        service = cls.get_service(CoreService.PORTABILITY_GUARD)
+        if service is None:
+            from core.logic.sluzby.portability.portability_guard import PortabilityGuardService
+            cls.register_service(CoreService.PORTABILITY_GUARD, PortabilityGuardService)
+            service = PortabilityGuardService
+        return service
+
+    @classmethod
+    def verify_venv_access(cls, venv_path: str) -> bool:
+        """Oficiálny mostík jadra pre overenie prístupu k venvu na danom PC (vracia True/False)."""
+        guard = cls.get_portability_guard_service()
+        return guard.verify_access(venv_path)
+
+    @classmethod
+    def register_venv_creation(cls, venv_path: str, source_python_path: str = None):
+        """Oficiálny mostík jadra pre evidenciu PC pri vzniku venvu."""
+        guard = cls.get_portability_guard_service()
+        guard.register_venv_creation(venv_path, source_python_path)

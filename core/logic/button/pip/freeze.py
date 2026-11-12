@@ -7,10 +7,18 @@ import os
 from core._path import Paths
 from core.logic.language_manager import LanguageManager
 from core.logic.commands.command_factory import PackageManagerFactory
+from core.core_bridge import CoreBridge
 
 class FreezeHandler:
     @staticmethod
     def run(venv_path, project_root, manager_type="pip", log_callback=None):
+        # 👉 KONTROLA PRENOSNOSTI
+        if not CoreBridge.verify_venv_access(venv_path):
+            if log_callback:
+                msg = CoreBridge.translate("blocked_portability_system_venv", "🛑 Zablokované: Ochrana prenosnosti (Systémový Venv).")
+                log_callback(msg)
+            return False
+
         # Vyčistenie a zjednotenie lomiek pre aktuálny operačný systém
         req_path = os.path.normpath(Paths.get_requirements_txt_path(project_root))
         CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0

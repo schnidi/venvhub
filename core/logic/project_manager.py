@@ -9,7 +9,7 @@ from core._path import Paths
 
 # --- IMPORTY LOGIKY CIEST ---
 from core.logic.path_logic.portable import PortablePathLogic
-from core.logic.path_logic.win_static import WinStaticPathLogic
+#from core.logic.path_logic.win_static import WinStaticPathLogic
 from core.logic.path_logic.network_path import NetworkPathLogic
 
 # --- IMPORT PRE PAMÄŤ PYTHONOV ---

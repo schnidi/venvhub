@@ -9,6 +9,7 @@ import re
 import json
 
 from core.logic.path_logic.disk_uuid_win_lin import get_all_disks_info
+from core.core_bridge import CoreBridge
 
 class PortablePathLogic:
     """
@@ -97,11 +98,17 @@ class PortablePathLogic:
         """
         Dokonalá, exaktná kontrola venvu.
         Opravuje aktivátory, import hooky pre lokálne balíčky a tiež pip -e editovateľné odkazy.
+        Systémové venvy na USB neprepisuje.
         """
         if not venv_path or not os.path.exists(venv_path):
             return
 
         if PortablePathLogic.is_linux():
+            return
+
+        # 👉 NATÍVNA OCHRANA PRENOSNOSTI: Zákaz prepisovania systémových venvov na USB
+        guard = CoreBridge.get_portability_guard_service()
+        if guard.is_portable_mode() and guard.is_system_venv(venv_path):
             return
 
         current_drive, _ = os.path.splitdrive(venv_path)
@@ -212,7 +219,6 @@ class PortablePathLogic:
             
             for file_path in editable_links:
                 filename = os.path.basename(file_path).lower()
-                # Preskočíme náš vlastný bootstrap pth a systémový pth
                 if filename == "venvhub_bootstrap.pth" or (filename.startswith("python") and filename.endswith("._pth")):
                     continue
                     

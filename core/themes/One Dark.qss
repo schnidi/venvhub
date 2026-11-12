@@ -1,6 +1,6 @@
 /*
  * Theme Name: One Dark (Atom Inspired)
- * Version: 2.2
+ * Version: 2.3
  * Author: Viliam Schneider
  */
 
@@ -44,11 +44,6 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:hover {
-    border-color: #61afef;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #61afef;
     border-color: #61afef;
 }
 
@@ -162,7 +157,7 @@ QHeaderView::section {
 
 /* Štýl pre bunky a riadky */
 QTableWidget::item {
-    padding: 6px;
+    padding: 2px;
     border: none;                
     background-color: transparent;
 }
@@ -211,10 +206,6 @@ QTableWidget QPushButton#btn_stop {
     font-size: 10px !important;
 }
 
-QTableWidget::item {
-    padding: 2px; 
-}
-
 QTableWidget QPushButton:hover {
     background-color: #3e4451;
     border: 1px solid #61afef;
@@ -249,7 +240,20 @@ QTextEdit {
 /* ============================================= */
 /* === OHRANIČENIE FRAMELESS OKIEN (POP-UPS) === */
 /* ============================================= */
-#VSCodeUserWindow, #LocalPackagesWindow, #PipManagerWindow, #PipEWindow, #AboutDialog, #ProgressDialog, #MasterManager, #BuildLogDialog, #CustomMessageBox {
+#VSCodeUserWindow, 
+#LocalPackagesWindow, 
+#PipManagerWindow, 
+#VenvTreeWindow, 
+#PipEWindow, 
+#AboutDialog, 
+#ProgressDialog, 
+#MasterManager, 
+#BuildLogDialog, 
+#CustomMessageBox, 
+#PackageSecurityAuditDialog, 
+#SecurityFixLogDialog, 
+#SnapshotWindow, 
+#SnapshotActionLogDialog {
     background-color: #282c34;
     border: 1px solid #61afef; /* One Dark modrý akcent na oknách */
 }
@@ -358,7 +362,7 @@ QPushButton#btn_vscode[ide_type="cursor"] {
 }
 
 /* ======================================================== */
-/* 1. KRÍŽIK X V LIŠTE (oprava veľkého modrého obdĺžnika)  */
+/* 1. KRÍŽIK X V LIŠTE                                      */
 /* ======================================================== */
 QPushButton#btn_close {
     background-color: transparent;
@@ -379,24 +383,148 @@ QPushButton#btn_close:hover {
 }
 
 /* ======================================================== */
-/* 2. TLAČIDLÁ DIALÓGU (OK, Áno, Nie)                       */
+/* 2. TLAČIDLÁ DIALÓGU (OK, Áno, Nie) - bez :not()         */
 /* ======================================================== */
-#CustomMessageBox QPushButton:not(#btn_close) {
+#CustomMessageBox QPushButton {
     background-color: #333333;
     color: #eeeeee;
-    border: 1px solid #444444;  /* Presne rovnaký rámček ako v celom QSS */
+    border: 1px solid #444444;
     border-radius: 4px;
     padding: 4px 12px;
     min-width: 60px;
 }
 
-#CustomMessageBox QPushButton:not(#btn_close):hover {
+#CustomMessageBox QPushButton:hover {
     background-color: #444444;
     border-color: #007acc;
     color: #ffffff;
 }
 
-#CustomMessageBox QPushButton:not(#btn_close):pressed {
+#CustomMessageBox QPushButton:pressed {
     background-color: #005a9e;
     color: #ffffff;
+}
+
+/* Krížik v dialógu - musí byť PO vyššie uvedených pravidlách */
+#CustomMessageBox QPushButton#btn_close {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 0px;
+    min-width: 45px;
+    max-width: 45px;
+    min-height: 32px;
+    max-height: 32px;
+    color: #cccccc;
+}
+
+#CustomMessageBox QPushButton#btn_close:hover {
+    background-color: #e81123;
+    color: #ffffff;
+    border: none;
+}
+
+/* ========================================================================= */
+/* === BEZPEČNOSTNÝ AUDIT (PackageSecurityAuditDialog & SecurityFixLogDialog) */
+/* ========================================================================= */
+
+/* 1. Hlavné okná auditu */
+#PackageSecurityAuditDialog, #SecurityFixLogDialog {
+    background-color: #282c34;
+    border: 1px solid #61afef;
+}
+
+/* 2. Strom zraniteľností v audite (QTreeWidget) */
+#PackageSecurityAuditDialog QTreeWidget {
+    background-color: #21252b;
+    color: #abb2bf;
+    border: 1px solid #181a1f;
+    border-radius: 4px;
+    outline: none;
+}
+
+#PackageSecurityAuditDialog QTreeWidget::item {
+    padding: 5px 2px;
+    border: none;
+    background-color: transparent;
+}
+
+#PackageSecurityAuditDialog QTreeWidget::item:hover {
+    background-color: #2c313a;
+    color: #ffffff;
+}
+
+#PackageSecurityAuditDialog QTreeWidget::item:selected {
+    background-color: #3e4451;
+    color: #ffffff;
+}
+
+/* Hlavička stromu */
+#PackageSecurityAuditDialog QHeaderView::section {
+    background-color: #21252b;
+    color: #5c6370;
+    padding: 6px;
+    border: 1px solid #181a1f;
+    font-weight: bold;
+}
+
+/* 3. Rozdeľovač (Splitter handle) */
+#PackageSecurityAuditDialog QSplitter::handle {
+    background-color: #181a1f;
+    width: 3px;
+}
+
+#PackageSecurityAuditDialog QSplitter::handle:hover {
+    background-color: #61afef;
+}
+
+/* 4. Bočný detailný panel (QTextEdit) */
+#PackageSecurityAuditDialog QTextEdit {
+    background-color: #21252b;
+    color: #abb2bf;
+    border: 1px solid #181a1f;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+/* 5. Tlačidlá filtra na hornej lište */
+#PackageSecurityAuditDialog QPushButton:checked {
+    background-color: #61afef !important;
+    color: #282c34 !important;
+    border: 1px solid #ffffff;
+    font-weight: bold;
+}
+
+/* 6. Zelené akčné tlačidlo aktualizácie balíčka (One Dark Zelená) */
+#PackageSecurityAuditDialog QPushButton#btn_fix_package {
+    background-color: #2c3e2e;
+    color: #98c379;
+    border: 1px solid #98c379;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 13px;
+    min-height: 28px;
+}
+
+#PackageSecurityAuditDialog QPushButton#btn_fix_package:hover {
+    background-color: #98c379;
+    color: #282c34;
+}
+
+#PackageSecurityAuditDialog QPushButton#btn_fix_package:disabled {
+    background-color: #21252b;
+    color: #5c6370;
+    border-color: #3e4451;
+}
+
+/* 7. Vyskakovacie okno so živým logom inštalácie */
+#SecurityFixLogDialog QTextEdit {
+    background-color: #1e2227;
+    color: #98c379; /* Monospace výstup v One Dark zelenej */
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    border: 1px solid #181a1f;
+    border-radius: 4px;
+    padding: 8px;
 }

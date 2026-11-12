@@ -26,6 +26,7 @@ from core.logic.sluzby.embed_python_created import EmbedPythonCreated
 
 # --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
 from windows.custom_message_box import CustomMessageBox
+from core.core_bridge import CoreBridge
 
 # --- NEZÁVISLÝ PREPÍNAČ PRE LOGOVANIE (Iba pre clone.py) ---
 LOGGING_ENABLED = False
@@ -336,6 +337,11 @@ class CloneHandler:
         if not source_venv_path or not os.path.exists(source_venv_path):
             return
 
+        # 1. KONTROLA PRENOSNOSTI PRED ZOBRAZENÍM DIALÓGU
+        if not CoreBridge.verify_venv_access(source_venv_path):
+            CustomMessageBox.show_portability_blocked(parent, os.path.basename(source_venv_path))
+            return
+
         venv_name = os.path.basename(source_venv_path)
         prefix = f"{core.active_project}_"
         clean_name = venv_name[len(prefix):] if venv_name.startswith(prefix) else venv_name
@@ -359,7 +365,6 @@ class CloneHandler:
         if os.path.exists(target_path):
             err_title = LanguageManager.get("title_error", "Chyba")
             err_msg = LanguageManager.get("msg_venv_exists", "Prostredie '{0}' už existuje!").format(full_new_folder_name)
-            # --- ZMENA NA NAŠU LIŠTU ---
             CustomMessageBox.warning(parent, err_title, err_msg)
             return
 
@@ -387,7 +392,6 @@ class CloneHandler:
             progress.accept()
             err_title = LanguageManager.get("clone_err_title", "Chyba klonovania")
             err_msg = LanguageManager.get("clone_err_generic", "Nastala chyba:\n{0}").format(err)
-            # --- ZMENA NA NAŠU LIŠTU ---
             CustomMessageBox.critical(parent, err_title, err_msg)
 
         CloneHandler._worker.error.connect(on_error, Qt.ConnectionType.QueuedConnection)

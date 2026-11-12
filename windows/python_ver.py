@@ -14,7 +14,7 @@ from core.logic.python_installer.box.python_ver_json import PythonVersionJsonMan
 from core.logic.python_installer.box.source_path import SourcePathManager
 from core.logic.python_installer.button.python_install import PythonInstaller
 
-from core.logic.sluzby.delete import UniversalDeleter
+#from core.logic.sluzby.delete import UniversalDeleter
 from core.logic.python_installer.button.pip_installer import PipInstaller
 
 from core.logic.sluzby.python_runtime_inspector import PipStatusWorker

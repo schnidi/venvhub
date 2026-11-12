@@ -295,6 +295,12 @@ class MasterManager(QWidget):
             msg = CoreBridge.translate("msg_no_venv_selected_for_pip", "Nie je vybrané žiadne prostredie.")
             CustomMessageBox.warning(self, title, msg)
             return
+
+        # KONTROLA PRENOSNOSTI
+        if not CoreBridge.verify_venv_access(self.selected_venv_path):
+            CustomMessageBox.show_portability_blocked(self, os.path.basename(self.selected_venv_path))
+            return
+
         project_root = Paths.get_project_path(self.core.projects_root, self.core.active_project)
         if self.pip_window is None:
             self.pip_window = PipManagerWindow(self, self.selected_venv_path, project_root)
@@ -308,6 +314,11 @@ class MasterManager(QWidget):
     def open_local_packages_window(self):
         if not self.selected_venv_path:
             CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), CoreBridge.translate("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
+            return
+
+        # KONTROLA PRENOSNOSTI
+        if not CoreBridge.verify_venv_access(self.selected_venv_path):
+            CustomMessageBox.show_portability_blocked(self, os.path.basename(self.selected_venv_path))
             return
             
         local_root = getattr(self.core, 'local_packages_root', '')
@@ -326,6 +337,11 @@ class MasterManager(QWidget):
     def open_pip_e_window(self):
         if not self.selected_venv_path:
             CustomMessageBox.warning(self, CoreBridge.translate("title_error", "Chyba"), CoreBridge.translate("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke."))
+            return
+
+        # KONTROLA PRENOSNOSTI
+        if not CoreBridge.verify_venv_access(self.selected_venv_path):
+            CustomMessageBox.show_portability_blocked(self, os.path.basename(self.selected_venv_path))
             return
 
         if self.pip_e_window is not None:
@@ -621,14 +637,51 @@ class MasterManager(QWidget):
     def run_pip_install(self):
         pkg = self.edit_pip_pkg.text().strip()
         if self.selected_venv_path and pkg:
-            PipManager.install_package(self.selected_venv_path, pkg, self.log_output, self.core.package_manager)
+            self.btn_pip_install.setEnabled(False)
+            self.btn_pip_uninstall.setEnabled(False) # Zamkneme pre istotu obe
+            
+            # --- OPRAVA: Signál na odblokovanie posielame priamo do PipManagera PRED štartom ---
+            PipManager.install_package(
+                self.selected_venv_path, 
+                pkg, 
+                self.log_output, 
+                self.core.package_manager, 
+                core=self.core,
+                on_finished=self._on_manager_package_op_finished
+            )
             self.edit_pip_pkg.clear()
 
     def run_pip_uninstall(self):
         pkg = self.edit_pip_pkg.text().strip()
         if self.selected_venv_path and pkg:
-            PipManager.uninstall_package(self.selected_venv_path, pkg, self.log_output, self.core.package_manager)
+            self.btn_pip_install.setEnabled(False)
+            self.btn_pip_uninstall.setEnabled(False) # Zamkneme pre istotu obe
+            
+            # --- OPRAVA: Signál na odblokovanie posielame priamo do PipManagera PRED štartom ---
+            PipManager.uninstall_package(
+                self.selected_venv_path, 
+                pkg, 
+                self.log_output, 
+                self.core.package_manager, 
+                core=self.core,
+                on_finished=self._on_manager_package_op_finished
+            )
             self.edit_pip_pkg.clear()
+
+    def _on_manager_package_op_finished(self, status):
+        """Vyhodnotenie stavového Enumu v okne Manažéra."""
+        self.btn_pip_install.setEnabled(True)
+        self.btn_pip_uninstall.setEnabled(True)
+
+        from core.core_states import PackageOperationStatus
+        if status in (PackageOperationStatus.SUCCESS, PackageOperationStatus.SUCCESS_WITH_CONFLICTS):
+            self.refresh_table()
+        elif status == PackageOperationStatus.BLOCKED:
+            CustomMessageBox.warning(
+                self, 
+                CoreBridge.translate("title_warning", "Upozornenie"),
+                CoreBridge.translate("msg_op_blocked", "Operácia bola zablokovaná systémovou ochranou.\nSkontrolujte log pre viac informácií.")
+            )
 
     def run_pip_reqs(self):
         if self.selected_venv_path:

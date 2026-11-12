@@ -57,6 +57,10 @@ class PipCommandDispatcher:
             "list_json": lambda **kwargs: 
                 [self.python_exe, "-m", "pip", "list", "--format=json"],
 
+            # --- NOVÉ PRE EDITABLE SERVICE ---
+            "list_editable_json": lambda **kwargs: 
+                [self.python_exe, "-m", "pip", "list", "--editable", "--format=json"],
+
             "list_outdated": lambda **kwargs: 
                 [self.python_exe, "-m", "pip", "list", "--outdated"],
 

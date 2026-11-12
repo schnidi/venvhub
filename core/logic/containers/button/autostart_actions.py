@@ -13,6 +13,7 @@ from core.logic.process_registry import process_registry
 from core.logic.containers.box.json_projects import AutostartJsonManager
 from core.logic.containers.logic.check_multi_venv import MultiVenvChecker
 from core.logic.containers.logic.hook import HookManager
+from core.core_bridge import CoreBridge
 
 
 class AutostartLaunchWorker(QThread):
@@ -74,6 +75,23 @@ class AutostartLaunchWorker(QThread):
 class AutostartActionHandler:
     @staticmethod
     def start_group(core, group_name, log_callback=None):
+        # 1. KONTROLA PRÍSTUPU PRE VŠETKY VENVY V SKUPINE
+        members = core.multi_groups.get(group_name, [])
+        for m in members:
+            venv_path = m.get("venv_path")
+            if venv_path and not CoreBridge.verify_venv_access(venv_path):
+                v_name = os.path.basename(venv_path)
+                if log_callback:
+                    default_msg = f"🛑 FATAL: Štart skupiny zablokovaný! Venv '{v_name}' patrí inému PC."
+                    raw_msg = CoreBridge.translate("group_start_blocked_log", default_msg)
+                    try:
+                        formatted_msg = raw_msg.format(venv_name=v_name)
+                    except Exception:
+                        formatted_msg = raw_msg
+                    log_callback(formatted_msg)
+                return  # Zablokuje štart celej skupiny
+
+        # 2. SPUSTENIE ŠTARTOVACIEHO VLÁKNA
         thread = AutostartLaunchWorker(core, group_name)
         if log_callback:
             thread.log_signal.connect(log_callback)
@@ -93,10 +111,10 @@ class AutostartActionHandler:
         if hasattr(core, '_active_autostart_threads'):
             for thread in list(core._active_autostart_threads):
                 if thread.group_name == group_name:
-                    thread.cancel() # Prepneme klapku is_cancelled na True
+                    thread.cancel()
                     try:
-                        thread.terminate() # Okamžite zabijeme bežiace spúšťacie vlákno
-                        thread.wait()      # Počkáme na bezpečné systémové uvoľnenie
+                        thread.terminate()
+                        thread.wait()
                     except Exception:
                         pass
 

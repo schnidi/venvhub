@@ -109,3 +109,21 @@ class CustomMessageBox(QDialog):
         dialog = CustomMessageBox(parent, title, text, QMessageBox.Icon.Question, buttons)
         dialog.exec()
         return dialog.result
+
+    @staticmethod
+    def show_portability_blocked(parent, venv_name: str):
+        title = LanguageManager.get("portability_protection_title", "Ochrana prenosnosti: Prístup zablokovaný")
+        default_text = (
+            f"Prostredie '{venv_name}' bolo vytvorené pomocou Systémového Pythonu na INOM počítači!\n\n"
+            "Z dôvodu nekompatibility systémových ciest a C-knižníc je na tomto PC ZAKÁZANÉ "
+            "ho spúšťať, klonovať, otvárať v ňom balíčky alebo ho spúšťať v skupine.\n\n"
+            "Keď prenesiete USB kľúč späť na pôvodný PC, okamžite sa odomkne a bude fungovať.\n"
+            "(Embed prostredia fungujú všade, toto platí len pre systémové)."
+        )
+        raw_text = LanguageManager.get("portability_protection_text", default_text)
+        try:
+            formatted_text = raw_text.format(venv_name=venv_name)
+        except Exception:
+            formatted_text = raw_text
+
+        CustomMessageBox.critical(parent, title, formatted_text)
