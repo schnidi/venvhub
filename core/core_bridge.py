@@ -5,7 +5,17 @@
 #----------------------------------------------------
 
 from typing import Any
-from core.core_states import CoreService, IDEType, IDEStatus, IDEProfileMode, LanguageStatus
+from core.core_states import (
+    CoreService, 
+    IDEType, 
+    IDEStatus, 
+    IDEProfileMode, 
+    LanguageStatus, 
+    PythonOrigin, 
+    PythonPipStatus, 
+    PythonDetectorStatus, 
+    UVStatus
+)
 from core.logic.vscode_user.sluzby.ide_paths import IDEPaths
 
 
@@ -16,20 +26,54 @@ class CoreBridge:
 
     @classmethod
     def register_service(cls, key: CoreService, service_instance: Any) -> None:
+        """Zaregistruje inštanciu alebo triedu služby do jadra."""
         cls._services[key] = service_instance
 
     @classmethod
     def get_service(cls, key: CoreService) -> Any:
+        """Vráti zaregistrovanú službu podľa kľúča."""
         return cls._services.get(key)
 
     # =========================================================================
-    # PREKLAD NÍZKEJ ÚROVNE NA DÁTOVÉ STAVY (Enumy)
+    # AUDIT A DIAGNOSTIKA
+    # =========================================================================
+    
+    @classmethod
+    def audit_services(cls) -> list[str]:
+        """Vráti zoznam všetkých aktívne zaregistrovaných služieb v jadre."""
+        print("\n--- [CoreBridge AUDIT ŠTART] ---")
+        registered = []
+
+        # Zoznam služieb, ktoré sú zámerne typu LAZY (načítavajú sa na požiadanie)
+        lazy_services = {
+            CoreService.PACKAGE_UPDATE, 
+            CoreService.PACKAGE_OPERATIONS, 
+            CoreService.EDITABLE_OPERATIONS,
+            CoreService.LOCAL_LINKER,
+            CoreService.PORTABILITY_GUARD,
+            CoreService.PYTHON_DETECTOR,
+            CoreService.UV_DETECTOR,
+        }
+        
+        for service_enum in CoreService:
+            if service_enum in cls._services:
+                registered.append(service_enum.value)
+                print(f"[CoreBridge] ✅ Služba '{service_enum.value}' je pripravená.")
+            elif service_enum in lazy_services:
+                registered.append(service_enum.value)
+                print(f"[CoreBridge] ⚡ Služba '{service_enum.value}' je pripravená (LAZY).")
+            else:
+                print(f"[CoreBridge] ❌ POZOR: Služba '{service_enum.value}' NIE JE registrovaná!")
+                
+        print("--- [CoreBridge AUDIT KONIEC] ---\n")
+        return registered
+
+    # =========================================================================
+    # PREKLAD NÍZKEJ ÚROVNE NA DÁTOVÉ STAVY (Enumy pre IDE)
     # =========================================================================
     @classmethod
     def get_ide_state(cls, ide_type: str | IDEType, portable_path: str = "", users_root: str = "", active_user_id: str = "") -> dict:
-        """
-        Zavolá nízkoúrovňový IDEPaths a výsledok zabalí do oficiálnych Enumov.
-        """
+        """Zavolá nízkoúrovňový IDEPaths a výsledok zabalí do oficiálnych Enumov."""
         ide_str = ide_type.value if isinstance(ide_type, IDEType) else str(ide_type)
         
         # 1. Holé fakty z nízkej úrovne:
@@ -61,44 +105,12 @@ class CoreBridge:
             "extensions_dir": extensions_dir
         }
 
-
     # =========================================================================
-    # AUDIT A DIAGNOSTIKA
-    # =========================================================================
-    
-    @classmethod
-    def audit_services(cls) -> list[str]:
-        """Vráti zoznam všetkých aktívne zaregistrovaných služieb v jadre."""
-        print("\n--- [CoreBridge AUDIT ŠTART] ---")
-        registered = []
-
-        # Zoznam služieb, ktoré sú zámerne typu LAZY (načítavajú sa na požiadanie)
-        lazy_services = {
-            CoreService.PACKAGE_UPDATE, 
-            CoreService.PACKAGE_OPERATIONS, 
-            CoreService.EDITABLE_OPERATIONS,
-            CoreService.LOCAL_LINKER,
-            CoreService.PORTABILITY_GUARD,  
-        }
-        
-        for service_enum in CoreService:
-            if service_enum in cls._services:
-                registered.append(service_enum.value)
-                print(f"[CoreBridge] ✅ Služba '{service_enum.value}' je pripravená.")
-            elif service_enum in lazy_services:
-                registered.append(service_enum.value)
-                print(f"[CoreBridge] ⚡ Služba '{service_enum.value}' je pripravená (LAZY).")
-            else:
-                print(f"[CoreBridge] ❌ POZOR: Služba '{service_enum.value}' NIE JE registrovaná!")
-                
-        print("--- [CoreBridge AUDIT KONIEC] ---\n")
-        return registered
-
-    # =========================================================================
-    # SPOJOVATEĽ PRE JAZYK (Delegácia na novú službu)
+    # SPOJOVATEĽ PRE JAZYK (Delegácia na registrovanú službu)
     # =========================================================================
     @classmethod
     def translate(cls, key: str, default: str = None) -> str:
+        """Preloží text podľa kľúča."""
         lang_service = cls.get_service(CoreService.LANGUAGE)
         if lang_service:
             return lang_service.get(key, default)
@@ -106,6 +118,7 @@ class CoreBridge:
 
     @classmethod
     def load_language(cls, lang_code: str = "auto") -> LanguageStatus:
+        """Načíta jazykový súbor."""
         lang_service = cls.get_service(CoreService.LANGUAGE)
         if lang_service:
             return lang_service.load_language(lang_code)
@@ -113,6 +126,7 @@ class CoreBridge:
 
     @classmethod
     def translate_window(cls, window: Any) -> None:
+        """Preloží prvky okna."""
         lang_service = cls.get_service(CoreService.LANGUAGE)
         if lang_service:
             lang_service.translate_ui(window)
@@ -147,10 +161,6 @@ class CoreBridge:
     # =========================================================================
     @classmethod
     def _get_package_update_service(cls):
-        """
-        Lazy-loader: Služba sa importuje a zaregistruje do centrálneho registra
-        AŽ VTEDY, keď je prvýkrát vyžiadaná. Využíva register_service.
-        """
         service = cls.get_service(CoreService.PACKAGE_UPDATE)
         if service is None:
             from core.logic.sluzby.venv.package_update import PackageUpdateService
@@ -160,9 +170,7 @@ class CoreBridge:
 
     @classmethod
     def update_all_packages(cls, venv_path: str, core=None, manager_type: str = "pip", log_callback=None) -> bool:
-        """
-        Oficiálny mostík jadra pre spustenie celého cyklu Update All.
-        """
+        """Oficiálny mostík jadra pre spustenie celého cyklu Update All."""
         service = cls._get_package_update_service()
         return service.update_all(venv_path, core, manager_type, log_callback)
 
@@ -171,10 +179,6 @@ class CoreBridge:
     # =========================================================================
     @classmethod
     def _get_package_operations_service(cls):
-        """
-        Lazy-loader: Služba pre inštaláciu a odinštalovanie balíčkov
-        sa importuje a registruje až pri prvom použití.
-        """
         service = cls.get_service(CoreService.PACKAGE_OPERATIONS)
         if service is None:
             from core.logic.sluzby.venv.pack_inst_unis import PackageOperationsService
@@ -184,32 +188,21 @@ class CoreBridge:
 
     @classmethod
     def install_packages(cls, core, venv_path: str, packages: list[str], log_callback=print):
-        """
-        Oficiálny mostík jadra pre bezpečnú inštaláciu balíčkov s APT integráciou.
-        Vracia: PackageOperationStatus
-        """
+        """Oficiálny mostík jadra pre bezpečnú inštaláciu balíčkov s APT integráciou."""
         service = cls._get_package_operations_service()
         return service.install_packages(core, venv_path, packages, log_callback)
 
     @classmethod
     def uninstall_packages(cls, core, venv_path: str, packages: list[str], log_callback=print):
-        """
-        Oficiálny mostík jadra pre bezpečnú odinštaláciu balíčkov s vyčistením sirot.
-        Vracia: PackageOperationStatus
-        """
+        """Oficiálny mostík jadra pre bezpečnú odinštaláciu balíčkov s vyčistením sirot."""
         service = cls._get_package_operations_service()
         return service.uninstall_packages(core, venv_path, packages, log_callback)
-
 
     # =========================================================================
     # LAZY SLUŽBA PRE EDITOVATEĽNÉ BALÍČKY PIP -E (EDITABLE_OPERATIONS)
     # =========================================================================
     @classmethod
     def _get_editable_operations_service(cls):
-        """
-        Lazy-loader: Služba pre editovateľné balíčky (pip -e)
-        sa importuje a registruje až pri prvom použití.
-        """
         service = cls.get_service(CoreService.EDITABLE_OPERATIONS)
         if service is None:
             from core.logic.sluzby.venv.editable_service import EditableOperationsService
@@ -225,26 +218,21 @@ class CoreBridge:
 
     @classmethod
     def install_editable_package(cls, core, venv_path: str, target_path: str, log_callback=print):
-        """Inštaluje balíček v editovateľnom režime (pip -e) s APT analýzou. Vracia PackageOperationStatus."""
+        """Inštaluje balíček v editovateľnom režime (pip -e) s APT analýzou."""
         service = cls._get_editable_operations_service()
         return service.install_editable_package(core, venv_path, target_path, log_callback)
 
     @classmethod
     def uninstall_editable_package(cls, core, venv_path: str, package_name: str, log_callback=print):
-        """Bezpečne odinštaluje editovateľný balíček s APT autoremove sirot. Vracia PackageOperationStatus."""
+        """Bezpečne odinštaluje editovateľný balíček s APT autoremove sirot."""
         service = cls._get_editable_operations_service()
         return service.uninstall_editable_package(core, venv_path, package_name, log_callback)
-
 
     # =========================================================================
     # LAZY SLUŽBA PRE LOKÁLNY LINKER (LOCAL_LINKER)
     # =========================================================================
     @classmethod
     def _get_local_linker_service(cls):
-        """
-        Lazy-loader: Služba pre lokálny linker balíčkov
-        sa importuje a registruje až pri prvom použití.
-        """
         service = cls.get_service(CoreService.LOCAL_LINKER)
         if service is None:
             from core.logic.sluzby.venv.linker_service import LocalLinkerService
@@ -272,7 +260,7 @@ class CoreBridge:
 
     @classmethod
     def verify_venv_access(cls, venv_path: str) -> bool:
-        """Oficiálny mostík jadra pre overenie prístupu k venvu na danom PC (vracia True/False)."""
+        """Oficiálny mostík jadra pre overenie prístupu k venvu na danom PC (True/False)."""
         guard = cls.get_portability_guard_service()
         return guard.verify_access(venv_path)
 
@@ -281,3 +269,106 @@ class CoreBridge:
         """Oficiálny mostík jadra pre evidenciu PC pri vzniku venvu."""
         guard = cls.get_portability_guard_service()
         guard.register_venv_creation(venv_path, source_python_path)
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE DETEKCIU PYTHONU (PYTHON_DETECTOR)
+    # =========================================================================
+    @classmethod
+    def get_python_detector_service(cls):
+        """Lazy-loader: Načíta novú službu z core/logic/sluzby/system/python_detector.py."""
+        service = cls.get_service(CoreService.PYTHON_DETECTOR)
+        if service is None:
+            from core.logic.sluzby.system.python_detector import PythonDetector
+            cls.register_service(CoreService.PYTHON_DETECTOR, PythonDetector)
+            service = PythonDetector
+        return service
+
+    @classmethod
+    def get_installed_pythons(cls, force_refresh: bool = False) -> list[dict]:
+        """Vráti zoznam Pythonov s priradenými Enumami (PythonOrigin, PythonPipStatus)."""
+        service = cls.get_python_detector_service()
+        return service.get_installed_pythons(force_refresh)
+
+    @classmethod
+    def get_python_detector_status(cls) -> PythonDetectorStatus:
+        """Vráti stav poslednej detekcie (SUCCESS, FALLBACK_ONLY, NO_PYTHONS_FOUND, ERROR)."""
+        service = cls.get_python_detector_service()
+        return service.get_detector_status()
+
+    @classmethod
+    def get_active_python(cls) -> str:
+        """Vráti cestu k aktívnemu Pythonu."""
+        service = cls.get_python_detector_service()
+        return service.get_active_python_path()
+
+    @classmethod
+    def set_active_python(cls, python_path: str) -> None:
+        """Nastaví aktívny Python."""
+        service = cls.get_python_detector_service()
+        service.set_active_python_path(python_path)
+
+    @classmethod
+    def resolve_parent_python(cls, venv_path: str) -> str:
+        """Zistí materský Python z pyvenv.cfg (multiplatformovo)."""
+        service = cls.get_python_detector_service()
+        return service.resolve_parent_python(venv_path)
+
+    @classmethod
+    def add_local_python(cls, folder_name: str, python_path: str, pip_status: PythonPipStatus | str = PythonPipStatus.OK) -> None:
+        """Zaregistruje nový lokálny Python do pamäte."""
+        service = cls.get_python_detector_service()
+        service.add_local_python(folder_name, python_path, pip_status)
+
+    @classmethod
+    def remove_local_python(cls, python_path: str) -> None:
+        """Odstráni lokálny Python z pamäte."""
+        service = cls.get_python_detector_service()
+        service.remove_local_python(python_path)
+
+    @classmethod
+    def update_python_pip_status(cls, python_path: str, status: PythonPipStatus | str) -> None:
+        """Aktualizuje stav pipu pre daný runtime na presný Enum."""
+        service = cls.get_python_detector_service()
+        service.update_pip_status(python_path, status)
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE UV DETEKTOR (UV_DETECTOR)
+    # =========================================================================
+    @classmethod
+    def get_uv_detector_service(cls):
+        """Lazy-loader: Načíta novú službu z core/logic/sluzby/venv/uv_detector.py."""
+        service = cls.get_service(CoreService.UV_DETECTOR)
+        if service is None:
+            from core.logic.sluzby.venv.uv_detector import UVDetector
+            cls.register_service(CoreService.UV_DETECTOR, UVDetector)
+            service = UVDetector
+        return service
+
+    @classmethod
+    def get_uv_state(cls, force_refresh: bool = False) -> dict:
+        """
+        Oficiálny mostík jadra pre zistenie kompletného stavu UV.
+        Mostík prepojí UVDetector s aktívnym Pythonom bez toho,
+        aby tieto dve nízkoúrovňové služby museli o sebe vedieť.
+        """
+        service = cls.get_uv_detector_service()
+        active_py = cls.get_active_python()
+        return service.get_uv_state(active_python_path=active_py, force_refresh=force_refresh)
+
+    @classmethod
+    def get_uv_path(cls) -> str | None:
+        """Mostík: vráti cestu k spustiteľnému súboru UV."""
+        state = cls.get_uv_state()
+        return state["executable"]
+
+    @classmethod
+    def is_uv_installed(cls) -> bool:
+        """Mostík: overí pripravenosť UV (True/False)."""
+        state = cls.get_uv_state()
+        return state["is_ready"]
+
+    @classmethod
+    def get_uv_version(cls) -> str | None:
+        """Mostík: vráti verziu UV."""
+        state = cls.get_uv_state()
+        return state["version"]

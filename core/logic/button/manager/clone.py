@@ -1,44 +1,73 @@
-#----------------------------------------
+#-------------------------------------------------------------------------------
 # Súbor: core/logic/button/manager/clone.py
-#----------------------------------------
+# Logika a asynchrónny worker pre klonovanie a zálohovanie virtuálnych prostredí.
+# Podporuje prenos balíčkov, hookov, APT stavu a izoláciu podľa typu prostredia.
+# Plne prepojené na mostík jadra CoreBridge.
+#-------------------------------------------------------------------------------
+
+"""
+Tento modul zabezpečuje:
+- Analýzu zdrojového venvu (zistenie materského Pythonu cez pyvenv.cfg a rodný list).
+- Bezpečný export a inštaláciu balíčkov cez vybraný PackageManager (pip / uv).
+- Oddelenú inštaláciu editovateľných balíčkov (pip -e).
+- Prenos VenvHub bootstrap prelinkovaní a APT stavov.
+- Overenie prístupových práv cez Portability Guard pred spustením.
+"""
 
 import os
-import re
 import subprocess
 import datetime
 import json
 import shutil
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
-from PyQt6.QtWidgets import QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QInputDialog
 
 from core._path import Paths
-from windows.progress_dialog import ProgressDialog
-from core.logic.language_manager import LanguageManager
+from core.core_bridge import CoreBridge
 from core.logic.birth_certificate import BirthCertificateGenerator
 from core.logic.sluzby.sanitize_venv_name import sanitize_venv_name
-
-# Využívame centrálneho dispečera namiesto manuálneho skladania príkazov
 from core.logic.commands.command_factory import PackageManagerFactory
-
-# --- NAŠE NOVÉ SLUŽBY ---
 from core.logic.sluzby.log_print_desktop import DesktopLogger
 from core.logic.sluzby.embed_python_created import EmbedPythonCreated
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
+from windows.progress_dialog import ProgressDialog
 from windows.custom_message_box import CustomMessageBox
-from core.core_bridge import CoreBridge
 
-# --- NEZÁVISLÝ PREPÍNAČ PRE LOGOVANIE (Iba pre clone.py) ---
 LOGGING_ENABLED = False
 clone_logger = DesktopLogger(is_enabled=LOGGING_ENABLED, filename="VENV_CLONE_LOG.txt")
 
 
 class CloneWorker(QObject):
+    """
+    Asynchrónny robot na klonovanie venvu v samostatnom vlákne.
+    Udržiava používateľa informovaného o každom kroku bez sekania GUI.
+    """
     finished = pyqtSignal()
     error = pyqtSignal(str)
     progress_msg = pyqtSignal(str)
 
-    def __init__(self, source_venv_path, target_venv_path, is_embed, parent_python, project_name, manager_type="pip", local_packages_root=""):
+    def __init__(
+        self, 
+        source_venv_path: str, 
+        target_venv_path: str, 
+        is_embed: bool, 
+        parent_python: str, 
+        project_name: str, 
+        manager_type: str = "pip", 
+        local_packages_root: str = ""
+    ):
+        """
+        Inicializuje workera pre klonovanie prostredia.
+
+        Args:
+            source_venv_path (str): Cesta k pôvodnému (klonovanému) venvu.
+            target_venv_path (str): Cesta k novému klonu.
+            is_embed (bool): True ak pôvodný venv vznikol z embed Pythonu.
+            parent_python (str): Cesta k materskému Pythonu pôvodného venvu.
+            project_name (str): Názov aktuálneho projektu.
+            manager_type (str): Zvolený správca balíčkov ("pip" alebo "uv").
+            local_packages_root (str): Cesta k lokálnym vývojovým balíčkom.
+        """
         super().__init__()
         self.source_venv_path = source_venv_path
         self.target_venv_path = target_venv_path
@@ -48,8 +77,8 @@ class CloneWorker(QObject):
         self.manager_type = manager_type
         self.local_packages_root = local_packages_root
 
-    def _stream_subprocess(self, cmd, task_name):
-        """Spustí proces a číta jeho výstup riadok po riadku bez sekania GUI."""
+    def _stream_subprocess(self, cmd: list[str], task_name: str) -> tuple[int, str]:
+        """Spustí subproces a v reálnom čase streamuje výstup po riadkoch do logu."""
         clone_logger.write(f"\n--- ŠTART: {task_name} ---")
         clone_logger.write(f"Príkaz: {' '.join(cmd)}")
         
@@ -57,19 +86,21 @@ class CloneWorker(QObject):
         env["PIP_PROGRESS_BAR"] = "off"
         env["UV_NO_PROGRESS"] = "1"
         
+        CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
+
         try:
             process = subprocess.Popen(
                 cmd, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.STDOUT, 
                 text=True, 
-                creationflags=0x08000000,
+                creationflags=CREATE_NO_WINDOW,
                 encoding='utf-8',
                 errors='replace',
                 env=env
             )
         except FileNotFoundError:
-            err_msg = f"Kritická chyba: Spúšťací súbor alebo inštalátor neexistuje -> {cmd[0]}"
+            err_msg = f"Kritická chyba: Spúšťací súbor neexistuje -> {cmd[0]}"
             clone_logger.write(err_msg)
             return 1, err_msg
         except Exception as e:
@@ -88,11 +119,11 @@ class CloneWorker(QObject):
         process.stdout.close()
         process.wait()
         
-        clone_logger.write(f"--- KONIEC: {task_name} (Návratový kód: {process.returncode}) ---")
+        clone_logger.write(f"--- KONIEC: {task_name} (Kód: {process.returncode}) ---")
         return process.returncode, "\n".join(output_history)
         
     def _clone_local_packages(self):
-        """Kopíruje VenvHub Import Hooky pre lokálne balíčky a stav APT do nového Venvu."""
+        """Kopíruje VenvHub Import Hooky a pravidlá APT do nového prostredia."""
         site_folder = "Lib" if os.name == 'nt' else "lib"
         source_site = os.path.join(self.source_venv_path, site_folder, "site-packages")
         target_site = os.path.join(self.target_venv_path, site_folder, "site-packages")
@@ -101,7 +132,7 @@ class CloneWorker(QObject):
             "venvhub.json", 
             "venvhub_bootstrap.py", 
             "venvhub_bootstrap.pth",
-            "venvhub_apt_state.json"  # Prenos APT stavu a explicitných balíčkov
+            "venvhub_apt_state.json"
         ]
         
         has_local = False
@@ -122,100 +153,114 @@ class CloneWorker(QObject):
                     clone_logger.write(f"Nepodarilo sa skopírovať {file_name}: {e}")
                     
         if has_local:
-            msg_local = LanguageManager.get("clone_local_pkgs_transferred", "🔗 Lokálne balíčky (VenvHub Hook) boli úspešne prenesené.")
+            msg_local = CoreBridge.translate(
+                "clone_local_pkgs_transferred", "🔗 Lokálne balíčky (VenvHub Hook) boli úspešne prenesené."
+            )
             self.progress_msg.emit(msg_local)
             
         if has_apt:
-            msg_apt = LanguageManager.get("clone_apt_state_transferred", "🧠 APT história a pravidlá závislostí boli úspešne prenesené.")
+            msg_apt = CoreBridge.translate(
+                "clone_apt_state_transferred", "🧠 APT história a pravidlá závislostí boli úspešne prenesené."
+            )
             self.progress_msg.emit(msg_apt)
 
     def run(self):
+        """Spustí kompletný klonovací cyklus."""
         try:
-            CREATE_NO_WINDOW = 0x08000000
+            CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
             clone_logger.write("\n" + "="*80)
-            clone_logger.write(f"ZACIATOK KLONOVANIA: {self.source_venv_path} -> {self.target_venv_path}")
+            clone_logger.write(f"ZAČIATOK KLONOVANIA: {self.source_venv_path} -> {self.target_venv_path}")
             clone_logger.write(f"Režim Embed: {self.is_embed}")
 
             source_python = Paths.get_venv_python_exe_path(self.source_venv_path)
 
-            # 1. Získanie zoznamu balíčkov pôvodného prostredia
-            self.progress_msg.emit(LanguageManager.get("clone_getting_pkgs", "Získavam zoznam balíčkov (freeze)..."))
+            # 1. Freeze balíčkov zo zdrojového venvu
+            msg_getting = CoreBridge.translate("clone_getting_pkgs", "Získavam zoznam balíčkov (freeze)...")
+            self.progress_msg.emit(msg_getting)
             
             source_dispatcher = PackageManagerFactory.get_dispatcher(self.manager_type, self.source_venv_path)
             freeze_cmd = source_dispatcher.get("freeze")
                 
             try:
-                freeze_proc = subprocess.run(freeze_cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW, timeout=30)
+                freeze_proc = subprocess.run(
+                    freeze_cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW, timeout=30
+                )
             except FileNotFoundError:
-                raise Exception(f"Inštalátor pre '{self.manager_type}' nebol vo vašom systéme nájdený!")
+                raise Exception(f"Inštalátor pre '{self.manager_type}' nebol v systéme nájdený!")
             except subprocess.TimeoutExpired:
                 raise Exception("Príkaz freeze neodpovedal v časovom limite (30s)!")
 
             if freeze_proc.returncode != 0:
-                err_msg = LanguageManager.get("clone_err_freeze", "Chyba pri 'freeze': {0}").format(freeze_proc.stderr)
-                raise Exception(err_msg)
+                err_freeze = CoreBridge.translate("clone_err_freeze", "Chyba pri 'freeze': {0}").format(freeze_proc.stderr)
+                raise Exception(err_freeze)
 
             filtered_reqs = []
             editable_reqs = []
             
             for line in freeze_proc.stdout.splitlines():
                 clean_line = line.strip()
-                if not clean_line: continue
+                if not clean_line:
+                    continue
                 
                 if clean_line.startswith("-e "):
                     path_part = clean_line[3:].strip()
                     editable_reqs.append(path_part)
-                    clone_logger.write(f"Extrahujem editable balíček pre bezpečnú inštaláciu: {path_part}")
+                    clone_logger.write(f"Extrahujem editable balíček: {path_part}")
                 else:
                     filtered_reqs.append(clean_line)
                     
             requirements_data = "\n".join(filtered_reqs)
-            clone_logger.write(f"Filtrované balíčky pre inštaláciu:\n{requirements_data}")
+            clone_logger.write(f"Filtrované balíčky:\n{requirements_data}")
 
-            fmt_creating = LanguageManager.get("clone_creating_venv", "Vytváram nové prostredie: {0}...")
+            fmt_creating = CoreBridge.translate("clone_creating_venv", "Vytváram nové prostredie: {0}...")
             self.progress_msg.emit(fmt_creating.format(os.path.basename(self.target_venv_path)))
             
-            # 2. Vytvorenie nového prostredia
+            # 2. Vytvorenie cieľového prostredia
             if self.is_embed:
                 if self.parent_python and os.path.exists(self.parent_python):
-                    self.progress_msg.emit(LanguageManager.get("clone_plan_a", "Používam rýchle klonovanie (rodičovský Python)..."))
+                    plan_a = CoreBridge.translate("clone_plan_a", "Používam rýchle klonovanie (rodičovský Python)...")
+                    self.progress_msg.emit(plan_a)
                     create_cmd = [self.parent_python, "-m", "virtualenv", "--no-download", self.target_venv_path]
                 else:
-                    self.progress_msg.emit(LanguageManager.get("clone_plan_b", "Pripravujem staré prostredie (inštalujem virtualenv)..."))
+                    plan_b = CoreBridge.translate("clone_plan_b", "Pripravujem pôvodné prostredie (inštalujem virtualenv)...")
+                    self.progress_msg.emit(plan_b)
                     inject_cmd = [source_python, "-m", "pip", "install", "virtualenv"]
                     ret_code, _ = self._stream_subprocess(inject_cmd, "INJECT_VIRTUALENV")
                     if ret_code != 0:
                         raise Exception("Nepodarilo sa nainštalovať 'virtualenv' do zdrojového prostredia.")
                     
-                    self.progress_msg.emit("Vytváram klon (záložná metóda)...")
+                    self.progress_msg.emit("Vytváram klon (záložná virtualenv metóda)...")
                     create_cmd = [source_python, "-m", "virtualenv", "--no-download", self.target_venv_path]
 
                 ret_code, err_txt = self._stream_subprocess(create_cmd, "CREATE_VENV_EMBED")
                 if ret_code != 0:
-                    raise Exception(LanguageManager.get("clone_err_create_embed", "Chyba pri vytváraní venv (virtualenv):\n{0}").format(err_txt))
+                    err_embed = CoreBridge.translate("clone_err_create_embed", "Chyba pri vytváraní venv (virtualenv):\n{0}")
+                    raise Exception(err_embed.format(err_txt))
 
-                self.progress_msg.emit(LanguageManager.get("clone_fixing_pth", "Opravujem konfiguráciu (._pth)..."))
-                # OPRAVA: Použitie spoločnej služby pre opravu cesty
+                self.progress_msg.emit(CoreBridge.translate("clone_fixing_pth", "Opravujem konfiguráciu (._pth)..."))
                 EmbedPythonCreated.fix_pth_file(self.target_venv_path, source_python)
                 
-                self.progress_msg.emit(LanguageManager.get("clone_verifying_pip", "Overujem funkčnosť PIP..."))
-                # OPRAVA: Použitie spoločnej služby pre verifikáciu
+                self.progress_msg.emit(CoreBridge.translate("clone_verifying_pip", "Overujem funkčnosť PIP..."))
                 if not EmbedPythonCreated.verify_pip_functional(self.target_venv_path):
-                     raise Exception(LanguageManager.get("clone_err_pip_verify", "PIP v novom prostredí nefunguje!"))
+                    raise Exception(CoreBridge.translate("clone_err_pip_verify", "PIP v novom prostredí nefunguje!"))
 
             else:
-                self.progress_msg.emit(LanguageManager.get("clone_creating_system", "Vytváram venv (metóda pre systémový Python)..."))
+                self.progress_msg.emit(CoreBridge.translate("clone_creating_system", "Vytváram venv (metóda pre systémový Python)..."))
                 create_cmd = [source_python, "-m", "venv", self.target_venv_path]
                 ret_code, err_txt = self._stream_subprocess(create_cmd, "CREATE_VENV_SYSTEM")
                 if ret_code != 0:
-                    raise Exception(LanguageManager.get("clone_err_create_system", "Chyba pri vytváraní venv:\n{0}").format(err_txt))
+                    err_system = CoreBridge.translate("clone_err_create_system", "Chyba pri vytváraní venv:\n{0}")
+                    raise Exception(err_system.format(err_txt))
 
-            # 3. Inštalácia ŠTANDARDNÝCH balíčkov do nového prostredia
+            # 3. Inštalácia štandardných balíčkov
             target_python = Paths.get_venv_python_exe_path(self.target_venv_path)
             target_dispatcher = PackageManagerFactory.get_dispatcher(self.manager_type, self.target_venv_path)
             
             if requirements_data.strip():
-                self.progress_msg.emit(LanguageManager.get("clone_installing_pkgs", "\n--- SŤAHUJEM A INŠTALUJEM BALÍČKY (čakajte prosím) ---"))
+                msg_installing = CoreBridge.translate(
+                    "clone_installing_pkgs", "\n--- SŤAHUJEM A INŠTALUJEM BALÍČKY (čakajte prosím) ---"
+                )
+                self.progress_msg.emit(msg_installing)
 
                 temp_req_path = os.path.join(self.target_venv_path, "clone_reqs.txt")
                 with open(temp_req_path, "w", encoding="utf-8") as f:
@@ -230,14 +275,17 @@ class CloneWorker(QObject):
                 ret_code, err_txt = self._stream_subprocess(install_cmd, "INSTALL_REQUIREMENTS")
 
                 if os.path.exists(temp_req_path):
-                    try: os.remove(temp_req_path)
-                    except: pass
+                    try:
+                        os.remove(temp_req_path)
+                    except Exception:
+                        pass
 
                 if ret_code != 0:
                     short_err = err_txt[-1500:] if len(err_txt) > 1500 else err_txt
-                    raise Exception(LanguageManager.get("clone_err_install", "Chyba pri inštalácii balíčkov:\n{0}").format(short_err))
+                    err_inst = CoreBridge.translate("clone_err_install", "Chyba pri inštalácii balíčkov:\n{0}")
+                    raise Exception(err_inst.format(short_err))
 
-            # 3.5: Inštalácia EDITOVATEĽNÝCH balíčkov (pip -e)
+            # 3.5. Inštalácia editovateľných balíčkov (pip -e)
             if editable_reqs:
                 self.progress_msg.emit("Inštalujem editovateľné balíčky (pip -e)...")
                 for req_path in editable_reqs:
@@ -246,11 +294,11 @@ class CloneWorker(QObject):
                     if ret_code != 0:
                         self.progress_msg.emit(f"⚠️ Upozornenie: Nepodarilo sa prelinkovať {req_path}")
 
-            # 4. Prenos VenvHub lokálnych balíčkov (Import Hook)
+            # 4. Prenos lokálnych balíčkov VenvHub
             self._clone_local_packages()
 
-            # 5. Zápis finálneho rodného listu pre novovytvorený klon
-            self.progress_msg.emit(LanguageManager.get("clone_finalizing", "\nZapisujem rodný list prostredia..."))
+            # 5. Zápis rodného listu
+            self.progress_msg.emit(CoreBridge.translate("clone_finalizing", "\nZapisujem rodný list prostredia..."))
             
             source_path_for_json = None
             if self.is_embed:
@@ -282,11 +330,19 @@ class CloneWorker(QObject):
 
 
 class CloneHandler:
+    """
+    Statický handler, ktorý spúšťa klonovací dialóg a koordinuje proces klonovania.
+    Overuje prístup k venvu cez CoreBridge a kontroluje duplicitu názvov.
+    """
     _thread = None
     _worker = None
 
     @staticmethod
-    def _analyze_source(source_venv_path):
+    def _analyze_source(source_venv_path: str) -> tuple[bool, str | None]:
+        """
+        Analyzuje zdrojové prostredie:
+        Zistí materský Python buď cez rodný list, alebo cez CoreBridge.resolve_parent_python().
+        """
         parent_python = None
         cert_path = os.path.join(source_venv_path, "venv_birth_certificate.json")
         if os.path.exists(cert_path):
@@ -305,15 +361,7 @@ class CloneHandler:
 
         pyvenv_cfg_path = os.path.join(source_venv_path, "pyvenv.cfg")
         if not parent_python and os.path.exists(pyvenv_cfg_path):
-            try:
-                with open(pyvenv_cfg_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.startswith("home ="):
-                            home_dir = line.split("=")[1].strip()
-                            parent_python = os.path.normpath(os.path.join(home_dir, "python.exe"))
-                            break
-            except Exception:
-                pass
+            parent_python = CoreBridge.resolve_parent_python(source_venv_path)
 
         if parent_python:
             expected_runtimes_dir = os.path.normpath(Paths.get_python_runtimes_install_dir()).lower()
@@ -333,7 +381,7 @@ class CloneHandler:
         return False, parent_python
 
     @staticmethod
-    def run(parent, core, source_venv_path):
+    def run(parent, core, source_venv_path: str):
         if not source_venv_path or not os.path.exists(source_venv_path):
             return
 
@@ -349,8 +397,8 @@ class CloneHandler:
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M")
         default_new_name = f"{clean_name}_backup_{now}"
 
-        title = LanguageManager.get("clone_dialog_title", "Klonovať / Zálohovať Venv")
-        label = LanguageManager.get("clone_dialog_label", "Zadajte názov pre kópiu prostredia '{0}':").format(clean_name)
+        title = CoreBridge.translate("clone_dialog_title", "Klonovať / Zálohovať Venv")
+        label = CoreBridge.translate("clone_dialog_label", "Zadajte názov pre kópiu prostredia '{0}':").format(clean_name)
         
         new_name, ok = QInputDialog.getText(parent, title, label, text=default_new_name)
 
@@ -363,15 +411,15 @@ class CloneHandler:
         target_path = Paths.get_venv_path(core.venv_hub_root, full_new_folder_name)
 
         if os.path.exists(target_path):
-            err_title = LanguageManager.get("title_error", "Chyba")
-            err_msg = LanguageManager.get("msg_venv_exists", "Prostredie '{0}' už existuje!").format(full_new_folder_name)
+            err_title = CoreBridge.translate("title_error", "Chyba")
+            err_msg = CoreBridge.translate("msg_venv_exists", "Prostredie '{0}' už existuje!").format(full_new_folder_name)
             CustomMessageBox.warning(parent, err_title, err_msg)
             return
 
         is_embed, parent_python = CloneHandler._analyze_source(source_venv_path)
 
         progress = ProgressDialog(parent)
-        progress.add_log_message(LanguageManager.get("clone_preparing", "Pripravujem klonovanie..."))
+        progress.add_log_message(CoreBridge.translate("clone_preparing", "Pripravujem klonovanie..."))
         
         CloneHandler._thread = QThread()
         CloneHandler._worker = CloneWorker(
@@ -390,8 +438,8 @@ class CloneHandler:
         
         def on_error(err):
             progress.accept()
-            err_title = LanguageManager.get("clone_err_title", "Chyba klonovania")
-            err_msg = LanguageManager.get("clone_err_generic", "Nastala chyba:\n{0}").format(err)
+            err_title = CoreBridge.translate("clone_err_title", "Chyba klonovania")
+            err_msg = CoreBridge.translate("clone_err_generic", "Nastala chyba:\n{0}").format(err)
             CustomMessageBox.critical(parent, err_title, err_msg)
 
         CloneHandler._worker.error.connect(on_error, Qt.ConnectionType.QueuedConnection)

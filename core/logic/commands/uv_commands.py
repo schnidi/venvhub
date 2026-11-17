@@ -1,22 +1,45 @@
-#----------------------------------------
+#-------------------------------------------------------------------------------
 # Súbor: core/logic/commands/uv_commands.py
-#----------------------------------------
+# Príkazový dispečer pre balíčkovací manažér UV (Astral).
+# Cestu k binárke UV získava výhradne cez mostík jadra CoreBridge.
+#-------------------------------------------------------------------------------
 
-from core._path import Paths
-from core.logic.uv_detector import UVDetector
-from core.logic.language_manager import LanguageManager
+"""
+Modul UvCommandDispatcher generuje zoznamy CLI argumentov pre nástroj 'uv pip'.
+Zabezpečuje plnú kompatibilitu s príkazmi pipu pri zachovaní extrémnej rýchlosti UV.
+"""
+
 from typing import Callable, Any
 import os
 
+from core._path import Paths
+from core.core_bridge import CoreBridge
+
+
 class UvCommandDispatcher:
+    """
+    Dispečer príkazov pre 'uv pip'.
+    Dynamicky skladá CLI príkazy s parametrom '--python' smerujúcim na vybraný interpreter.
+    """
+
     def __init__(self, venv_path: str):
+        """
+        Inicializuje dispečera a overí existenciu python.exe v danom prostredí.
+
+        Args:
+            venv_path (str): Cesta k virtuálnemu prostrediu.
+        """
         python_exe_path = Paths.get_venv_python_exe_path(venv_path)
         if not venv_path or not os.path.exists(python_exe_path):
-            err_msg = LanguageManager.get("uv_cmd_err_no_python", "Cesta k python.exe neexistuje: {path}").format(path=python_exe_path)
+            err_msg = CoreBridge.translate(
+                "uv_cmd_err_no_python", "Cesta k python.exe neexistuje: {path}"
+            ).format(path=python_exe_path)
             raise ValueError(err_msg)
             
         self.python_exe = python_exe_path
-        uv_exe = UVDetector.get_uv_path() or "uv"
+        
+        # Cestu k UV získavame výhradne cez mostík jadra
+        uv_exe = CoreBridge.get_uv_path() or "uv"
         
         self.uv_base = [uv_exe, "pip"]
         self.python_arg = ["--python", self.python_exe]
@@ -47,11 +70,9 @@ class UvCommandDispatcher:
             "install_requirements": lambda **kwargs: 
                 self.uv_base + ["install", "-r", Paths.get_requirements_txt_path(kwargs['project_root'])] + self.python_arg,
             
-            # --- NOVÉ PRE CLONE.PY (Bez no-build-isolation, ktorá mrazila UV) ---
             "install_req_file": lambda **kwargs: 
                 self.uv_base + ["install", "-r", kwargs['file_path']] + self.python_arg,
                 
-            # --- NOVÉ PRE CLONE.PY (UV pip -e) ---
             "install_editable": lambda **kwargs: 
                 self.uv_base + ["install", "-e", kwargs['path']] + self.python_arg,
 
@@ -64,7 +85,6 @@ class UvCommandDispatcher:
             "list_json": lambda **kwargs: 
                 self.uv_base + ["list", "--format=json"] + self.python_arg,
 
-            # --- NOVÉ PRE EDITABLE SERVICE ---
             "list_editable_json": lambda **kwargs: 
                 self.uv_base + ["list", "--editable", "--format=json"] + self.python_arg,
 
@@ -78,12 +98,10 @@ class UvCommandDispatcher:
                 self.uv_base + ["show"] + [kwargs['package_name']] + self.python_arg,
 
             "search": lambda **kwargs: 
-                ["echo", LanguageManager.get("uv_cmd_no_search", "UV nepodporuje 'search'.")],
+                ["echo", CoreBridge.translate("uv_cmd_no_search", "UV nepodporuje 'search'.")],
             
             "check": lambda **kwargs: 
                 self.uv_base + ["check"] + self.python_arg,
-
-            # --- NOVÉ PRÍKAZY PRE APT LOGIKU ---
 
             "show_multiple": lambda **kwargs: 
                 self.uv_base + ["show"] + kwargs['packages'] + self.python_arg,
@@ -93,7 +111,10 @@ class UvCommandDispatcher:
         }
 
     def get(self, command_key: str, **kwargs: Any) -> list[str]:
+        """Vráti hotový zoznam CLI argumentov podľa požadovaného kľúča."""
         if command_key not in self._commands:
-            err_msg = LanguageManager.get("uv_cmd_err_invalid", "Príkaz '{cmd}' neexistuje.").format(cmd=command_key)
+            err_msg = CoreBridge.translate(
+                "uv_cmd_err_invalid", "Príkaz '{cmd}' neexistuje."
+            ).format(cmd=command_key)
             raise KeyError(err_msg)
         return self._commands[command_key](**kwargs)

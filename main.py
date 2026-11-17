@@ -1,5 +1,5 @@
 """
-Súbor: main.pyw
+Súbor: main.py
 Hlavný spúšťací modul aplikácie VenvHub Pro.
 """
 
@@ -7,7 +7,27 @@ import os
 import sys
 import threading
 
+# =========================================================================
+# NATVRDO PREPNÚŤ CELÝ WINDOWS A KONZOLU DO NATIVE UTF-8 (Code Page 65001)
+# =========================================================================
+if sys.platform == "win32":
+    import ctypes
+    ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+    ctypes.windll.kernel32.SetConsoleCP(65001)
+
+    handle = ctypes.windll.kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+    mode = ctypes.c_ulong()
+    if ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        ctypes.windll.kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 os.environ["PYTHONUTF8"] = "1"
+os.environ["PYTHONIOENCODING"] = "utf-8"
+# =========================================================================
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
@@ -26,11 +46,7 @@ CoreBridge.register_service(CoreService.IDE_PATHS, IDEPaths)
 # 2. PROSTREDIE A LISTNERY
 # =========================================================================
 from core.logic.pyqt_to_pyside import setup_qt_environment
-# TOTO MUSÍ ZBEHNÚŤ AKO PRVÉ PRED AKÝMKOĽVEK IMPORTOM Z PYQT
 setup_qt_environment()
-
-#from core.logic.system_listener import SystemListener
-#SystemListener.start_listening()
 
 # --- ŠTART 2s SCANNERA PRE VS CODE & CURSOR ---
 from core.logic.ide_detector import IDEDetector
@@ -61,24 +77,23 @@ def _start_background_update_check():
 
 
 def main():
-    # Aplikácia musí vzniknúť ako prvá!
     app = QApplication(sys.argv)
 
     # =========================================================================
     # 3. REGISTRÁCIA GUI SLUŽIEB & PREKLADY JADRA
-    # (AŽ TU je bezpečné importovať LanguageManager, keď je Qt prostredie ready)
     # =========================================================================
     from core.logic.sluzby.language.language_manager import LanguageManager
     
     lang_manager = LanguageManager()
     CoreBridge.register_service(CoreService.LANGUAGE, lang_manager)
     
+    # === TU JE SPRÁVNE MIESTO PRE AUDIT ===
     # Prebehne kontrola zoznamu služieb a vypíše sa do konzoly
     CoreBridge.audit_services()
+    # ======================================
     
     # Načítame preklady úplne na začiatku, pred tvorbou okien
-    lang_status = CoreBridge.load_language("auto")
-    print(f"[MAIN] Jazyk inicializovaný so stavom: {lang_status.value}")
+    CoreBridge.load_language("auto")
     # =========================================================================
 
     AboutLogic.register_about_dialog(AboutDialog)
@@ -111,9 +126,6 @@ def main():
     _start_background_update_check()
 
     core = ProjectCore()
-
-    #from core.logic.sluzby.apt_listener import AptListener
-    #AptListener.start_listening(core)
     
     if core.active_theme and core.active_theme != "default":
         SkinManager.apply_skin(core.active_theme)

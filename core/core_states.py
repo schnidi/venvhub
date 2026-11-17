@@ -15,6 +15,8 @@ class CoreService(str, Enum):
     EDITABLE_OPERATIONS = "EDITABLE_OPERATIONS"
     LOCAL_LINKER = "LOCAL_LINKER"
     PORTABILITY_GUARD = "PORTABILITY_GUARD"
+    PYTHON_DETECTOR = "PYTHON_DETECTOR"
+    UV_DETECTOR = "UV_DETECTOR"
 
 class IDEType(str, Enum):
     """Typ editora."""
@@ -87,4 +89,70 @@ class LinkerOperationStatus(str, Enum):
     MISSING_LOCAL_DEP = "MISSING_LOCAL_DEP" # Chýba nejaký lokálny modul v zložke
     DEPENDENCY_ERROR = "DEPENDENCY_ERROR"   # Chyba pri sťahovaní externých PIP závislostí
     ERROR = "ERROR"                         # Kritická chyba (napr. problém so zápisom na disk)
+
+
+# ====================================================
+# STAVY PRE PYTHON DETEKTOR
+# ====================================================
+
+class PythonOrigin(str, Enum):
+    """Pôvod a typ Python runtime prostredia."""
+    SYSTEM = "SYSTEM"          # Systémový Python (Windows py, Linux /usr/bin, macOS Homebrew/Framework)
+    LOCAL = "LOCAL"            # Lokálny prenosný Python v PyRuntimes (Embed / Standalone)
+    VENV = "VENV"              # Virtuálne prostredie
+
+class PythonPipStatus(str, Enum):
+    """Fyzický stav nástroja PIP a site-packages v danom runtime."""
+    OK = "OK"                  # PIP je overený, funkčný a pripravený
+    CHECKING = "CHECKING"      # Prebieha asynchrónne overovanie na pozadí
+    MISSING = "MISSING"        # PIP fyzicky chýba (typické pre čistý embed zip)
+    ERROR = "ERROR"            # PIP havaroval (Access Violation, poškodený runtime)
+
+class PythonDetectorStatus(str, Enum):
+    """Výsledok procesu detekcie Python prostredí."""
+    SUCCESS = "SUCCESS"                 # Našiel sa aspoň jeden platný interpreter
+    FALLBACK_ONLY = "FALLBACK_ONLY"     # Nenašiel sa žiadny systémový, použil sa iba sys.executable
+    NO_PYTHONS_FOUND = "NO_PYTHONS_FOUND" # Kritický stav - nenašiel sa vôbec žiadny interpreter
+    ERROR = "ERROR"                     # Chyba pri skenovaní
+
+
+# ====================================================
+# STAVY PRE UV DETEKTOR (UV_DETECTOR)
+# ====================================================
+
+class UVStatus(str, Enum):
+    """Fyzický stav a pôvod binárky UV na disku a v systéme."""
+    BUNDLED = "BUNDLED"          # Vstavané priamo v distribúcii aplikácie (MEIPASS / root)
+    ACTIVE_VENV = "ACTIVE_VENV"  # V aktívnom venv/Python prostredí (Scripts/ alebo bin/)
+    STANDALONE = "STANDALONE"    # V lokálnych inštaláciách (Homebrew, Cargo, ~/.local/bin)
+    SYSTEM_PATH = "SYSTEM_PATH"  # Globálne v systémovej premennej PATH
+    NOT_FOUND = "NOT_FOUND"      # UV sa v systéme vôbec nenašlo
+    ERROR = "ERROR"              # Súbor existuje, ale nefunguje (havária, zlá architektúra, chýbajúce práva)
+
+
+# ====================================================
+# STAVY PRE PYTHON DETEKTOR
+# ====================================================
+
+class PythonOrigin(str, Enum):
+    """Pôvod a typ Python runtime prostredia."""
+    SYSTEM = "SYSTEM"          # Systémový Python (Windows py, Linux /usr/bin, macOS Homebrew)
+    LOCAL = "LOCAL"            # Lokálny prenosný Python v PyRuntimes (Embed)
+    VENV = "VENV"              # Virtuálne prostredie
+
+
+class PythonPipStatus(str, Enum):
+    """Fyzický stav nástroja PIP v danom runtime."""
+    OK = "OK"                  # PIP je overený a funkčný
+    CHECKING = "CHECKING"      # Prebieha asynchrónne overovanie na pozadí
+    MISSING = "MISSING"        # PIP fyzicky chýba (čistý embed zip)
+    ERROR = "ERROR"            # PIP havaroval alebo je runtime poškodený
+
+
+class PythonDetectorStatus(str, Enum):
+    """Výsledok procesu detekcie Python prostredí."""
+    SUCCESS = "SUCCESS"                 # Našiel sa aspoň jeden platný interpreter
+    FALLBACK_ONLY = "FALLBACK_ONLY"     # Nenašiel sa žiadny systémový, použitý len sys.executable
+    NO_PYTHONS_FOUND = "NO_PYTHONS_FOUND" # Kritický stav - nenašiel sa žiadny interpreter
+    ERROR = "ERROR"                     # Chyba pri skenovaní OS
 

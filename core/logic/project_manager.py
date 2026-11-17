@@ -1,25 +1,40 @@
-#----------------------------------------
+#-------------------------------------------------------------------------------
 # Súbor: core/logic/project_manager.py
-#----------------------------------------
+# Hlavný správca stavu projektov a konfigurácie aplikácie VenvHub Pro.
+# Prepája projektové dáta s mostíkom jadra CoreBridge (0 priamych závislostí na starom detektore).
+#-------------------------------------------------------------------------------
+
+"""
+Modul ProjectCore spravuje životný cyklus nastavení projektov, virtuálnych prostredí,
+autostart skupín a režimov editora (VS Code / Cursor).
+Integruje dekódovanie prenosných ciest cez UUID diskov a deleguje správu
+interpretov na centrálny CoreBridge.
+"""
 
 import os
 import json
 import re
 from core._path import Paths
 
-# --- IMPORTY LOGIKY CIEST ---
+# --- LOGIKA PRENOSNÝCH A SIEŤOVÝCH CIEST ---
 from core.logic.path_logic.portable import PortablePathLogic
-#from core.logic.path_logic.win_static import WinStaticPathLogic
 from core.logic.path_logic.network_path import NetworkPathLogic
 
-# --- IMPORT PRE PAMÄŤ PYTHONOV ---
-from core.logic.python_detector import PythonDetector
+# --- MOSTÍK JADRA PRE SPRÁVU PYTHONU ---
+from core.core_bridge import CoreBridge
 
-# --- IMPORT PRE OPRAVU VS CODE CIEST ---
+# --- INTEGRÁCIA PRE IDE NASTAVENIA ---
 from core.logic.vs_code_json import VSCodeIntegration
 
+
 class ProjectCore:
+    """
+    Centrálne dátové jadro aplikácie.
+    Uchováva konfiguráciu, zoznamy projektov, priradené venvy a profily.
+    """
+
     def __init__(self):
+        """Inicializuje základné dátové štruktúry a načíta konfiguráciu zo súboru."""
         self.project_data = {}
         
         self.projects_root = ""
@@ -31,13 +46,11 @@ class ProjectCore:
         # --- ODDELENÉ PROFILY PRE VS CODE A CURSOR ---
         self.active_vscode_user = "" 
         self.active_cursor_user = "" 
-        # ---------------------------------------------
 
         # --- NASTAVENIA PRE IDE EDITORY ---
         self.active_ide = "vscode"
         self.portable_vscode_path = ""
         self.portable_cursor_path = ""
-        # ----------------------------------
         
         self._active_project = "" 
         self._temp_venv = None 
@@ -54,18 +67,25 @@ class ProjectCore:
 
         self.is_portable = self._detect_portable_mode()
 
+        # Načítanie existujúcej konfigurácie z disku
         self.load_config()
         
-        PythonDetector.get_installed_pythons(force_refresh=True)
+        # Inicializácia / zahriatie cache Pythonov cez CoreBridge
+        CoreBridge.get_installed_pythons(force_refresh=True)
 
     def _detect_portable_mode(self) -> bool:
+        """
+        Zistí, či aplikácia beží v prenosnom režime (napr. na USB kľúči).
+        Detekcia vychádza z prítomnosti značkového súboru '_is_portable.ini'.
+        """
         app_root = Paths.get_app_root_path()
         marker_path = os.path.join(app_root, Paths.PORTABLE_MARKER_FILENAME)
         return os.path.exists(marker_path)
 
     # =========================================================================
-    # --- POMOCNÉ METÓDY PRE ZÍSKANIE / NASTAVENIE PROFILU PODĽA AKTÍVNEHO IDE ---
+    # --- PROFILY PODĽA AKTÍVNEHO IDE ---
     # =========================================================================
+
     def get_active_ide_user(self) -> str:
         """Vráti ID aktívneho profilu podľa toho, ktorý editor (IDE) je momentálne zvolený."""
         if self.active_ide == "cursor":
@@ -80,19 +100,23 @@ class ProjectCore:
             self.active_vscode_user = user_id
 
     # =========================================================================
+    # --- VLASTNOSTI AKTÍVNEHO PROJEKTU A VENVU ---
+    # =========================================================================
 
     @property
-    def active_project(self):
+    def active_project(self) -> str:
+        """Vráti názov momentálne zvoleného projektu."""
         return self._active_project
 
     @active_project.setter
-    def active_project(self, value):
+    def active_project(self, value: str):
         if self._active_project != value:
             self._temp_venv = None
         self._active_project = value
 
     @property
-    def active_venv_path(self):
+    def active_venv_path(self) -> str:
+        """Vráti cestu k aktívnemu virtuálnemu prostrediu (alebo dočasnému venvu)."""
         if self._temp_venv:
             return self._temp_venv
         if self._active_project and self._active_project in self.project_data:
@@ -100,37 +124,48 @@ class ProjectCore:
         return ""
 
     @active_venv_path.setter
-    def active_venv_path(self, value):
-        if not self._active_project: return
+    def active_venv_path(self, value: str):
+        if not self._active_project:
+            return
         self._ensure_project_entry()
         self.project_data[self._active_project]["venv"] = value
         self._temp_venv = None
 
-    def set_temporary_venv(self, value):
+    def set_temporary_venv(self, value: str):
+        """Nastaví dočasný venv bez prepísania trvalého v konfigurácii."""
         self._temp_venv = value
 
-    def get_project_default_venv(self):
+    def get_project_default_venv(self) -> str:
+        """Vráti predvolené virtuálne prostredie priradené k aktívnemu projektu."""
         if self._active_project and self._active_project in self.project_data:
             return self.project_data[self._active_project].get("venv", "")
         return ""
 
     @property
-    def last_script(self):
+    def last_script(self) -> str:
+        """Vráti názov posledného spúšťacieho skriptu pre aktívny projekt."""
         if self._active_project and self._active_project in self.project_data:
             return self.project_data[self._active_project].get("script", "main.py")
         return "main.py"
 
     @last_script.setter
-    def last_script(self, value):
-        if not self._active_project: return
+    def last_script(self, value: str):
+        if not self._active_project:
+            return
         self._ensure_project_entry()
         self.project_data[self._active_project]["script"] = value
 
     def _ensure_project_entry(self):
+        """Zabezpečí existenciu kľúča projektu v dátovom slovníku."""
         if self._active_project not in self.project_data:
             self.project_data[self._active_project] = {}
 
+    # =========================================================================
+    # --- UKLADANIE A NAČÍTANIE KONFIGURÁCIE ---
+    # =========================================================================
+
     def load_config(self):
+        """Načíta konfiguráciu zo súboru a aplikuje prípadné prenosné opravy ciest."""
         config_path = Paths.get_config_file_path()
         if not os.path.exists(config_path):
             self.cfg = {}
@@ -139,7 +174,7 @@ class ProjectCore:
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 self.cfg = json.load(f)
-        except:
+        except Exception:
             self.cfg = {}
             return
 
@@ -149,18 +184,14 @@ class ProjectCore:
         self.pip_e_packages_root = self.cfg.get("pip_e_packages_root", "")
         self.vscode_users_root = self.cfg.get("vscode_users_root", "") 
 
-        # --- NAČÍTANIE ODDELENÝCH PROFILOV ---
         self.active_vscode_user = self.cfg.get("active_vscode_user", "") 
         self.active_cursor_user = self.cfg.get("active_cursor_user", "") 
-        # -------------------------------------
 
-        # --- NAČÍTANIE NASTAVENÍ IDE ---
         self.active_ide = self.cfg.get("active_ide", "vscode")
         self.portable_vscode_path = self.cfg.get("portable_vscode_path", "")
         self.portable_cursor_path = self.cfg.get("portable_cursor_path", "")
-        # -------------------------------
         
-        # 1. DEKÓDOVANIE Z UUID DO REÁLNYCH CIEST V RAM
+        # 1. Dekódovanie z UUID do reálnych ciest v RAM pri portable režime
         if self.is_portable:
             self._apply_portable_path_fixes()
 
@@ -178,15 +209,16 @@ class ProjectCore:
         raw_project_data = self.cfg.get("project_data", {})
         root_missing = bool(self.projects_root) and not os.path.exists(self.projects_root)
         
-        # 2. DEKÓDOVANIE CIEST PRE VENVY V JEDNOTLIVÝCH PROJEKTOCH
+        # 2. Dekódovanie a overenie ciest pre venvy v projektoch
         cleaned_project_data = self._process_and_clean_data(raw_project_data)
         self.project_data = cleaned_project_data
         
-        # 3. Uloženie len ak sa dáta skutočne zmenili
+        # 3. Uloženie iba v prípade, ak nastala reálna zmena dát
         if not (root_missing and cleaned_project_data == raw_project_data):
             self.save_config()
 
     def _apply_portable_path_fixes(self):
+        """Preloží uložené UUID označenia diskov na aktuálne platné písmená jednotiek."""
         new_proj_root, changed_p = PortablePathLogic.resolve_path(self.projects_root)
         if changed_p:
             self.projects_root = new_proj_root
@@ -207,7 +239,6 @@ class ProjectCore:
         if changed_v:
             self.vscode_users_root = new_vscode_root
 
-        # --- PRENOSNÉ OPRAVY CIEST PRE IDE EDITORY ---
         new_port_vscode, changed_pvc = PortablePathLogic.resolve_path(self.portable_vscode_path)
         if changed_pvc:
             self.portable_vscode_path = new_port_vscode
@@ -215,11 +246,10 @@ class ProjectCore:
         new_port_cursor, changed_pcur = PortablePathLogic.resolve_path(self.portable_cursor_path)
         if changed_pcur:
             self.portable_cursor_path = new_port_cursor
-        # ---------------------------------------------
 
-    def _process_and_clean_data(self, raw_data):
+    def _process_and_clean_data(self, raw_data: dict) -> dict:
+        """Overí dostupnosť ciest a odstráni neplatné záznamy o projektoch a venvoch."""
         clean_data = {}
-        
         root_missing = not os.path.exists(self.projects_root)
         
         if root_missing:
@@ -242,9 +272,6 @@ class ProjectCore:
                     fixed_venv, changed = PortablePathLogic.resolve_path(venv_path)
                     if changed:
                         venv_path = fixed_venv
-                        # ========================================================
-                        # OPRAVA PRE VS CODE / IDE: Tichá úprava settings.json
-                        # ========================================================
                         VSCodeIntegration.repair_portable_path(full_project_path, fixed_venv, self.local_packages_root)
                 
                 if not os.path.exists(venv_path):
@@ -266,7 +293,8 @@ class ProjectCore:
         self._cleanup_multi_groups(clean_data)
         return clean_data
 
-    def _cleanup_multi_groups(self, valid_project_data):
+    def _cleanup_multi_groups(self, valid_project_data: dict):
+        """Odstráni zo skupín projekty, ktoré fyzicky prestali existovať."""
         valid_projects = set(valid_project_data.keys())
         keys_to_delete = []
 
@@ -274,14 +302,12 @@ class ProjectCore:
             new_members = []
             for m in members:
                 if m.get("project") in valid_projects:
-                    
                     if self.is_portable:
                         p_name = m.get("project")
                         v_name = m.get("venv_name")
                         if p_name and v_name:
                             full_venv_name = f"{p_name}_{v_name}"
                             m["venv_path"] = Paths.get_venv_path(self.venv_hub_root, full_venv_name)
-
                     new_members.append(m)
                     
             self.multi_groups[group_name] = new_members
@@ -292,11 +318,10 @@ class ProjectCore:
             del self.multi_groups[k]
 
     def save_config(self):
-        """Ukladá nastavenia do JSONu. V Portable režime pred uložením zakóduje cesty do UUID."""
+        """Uloží nastavenia do JSON súboru. V Portable režime zakóduje cesty do UUID formátu."""
         if self._active_project and self._active_project not in self.project_data:
-             self.project_data[self._active_project] = {}
+            self.project_data[self._active_project] = {}
 
-        # Pripravíme si kópie pre zápis do JSONu
         s_projects_root = self.projects_root
         s_venv_hub_root = self.venv_hub_root
         s_local_packages_root = self.local_packages_root
@@ -307,7 +332,6 @@ class ProjectCore:
         s_project_data = self.project_data.copy()
         s_multi_groups = self.multi_groups.copy()
 
-        # Ak sme v Portable režime, vykonáme ZAKÓDOVANIE (UUID)
         if self.is_portable:
             s_projects_root = PortablePathLogic.encode_path(self.projects_root)
             s_venv_hub_root = PortablePathLogic.encode_path(self.venv_hub_root)
@@ -317,7 +341,6 @@ class ProjectCore:
             s_portable_vscode_path = PortablePathLogic.encode_path(self.portable_vscode_path)
             s_portable_cursor_path = PortablePathLogic.encode_path(self.portable_cursor_path)
             
-            # Kódovanie ciest pre jednotlivé Venvy projektov
             s_project_data = {}
             for p_name, p_data in self.project_data.items():
                 s_project_data[p_name] = {
@@ -325,7 +348,6 @@ class ProjectCore:
                     "script": p_data.get("script", "main.py")
                 }
                 
-            # Kódovanie ciest v Autostart/Multi skupinách
             s_multi_groups = {}
             for g_name, members in self.multi_groups.items():
                 s_members = []
@@ -336,7 +358,6 @@ class ProjectCore:
                     s_members.append(new_m)
                 s_multi_groups[g_name] = s_members
 
-        # Vytvorenie finálneho slovníka pre JSON
         data = {
             "projects_root": s_projects_root,
             "venv_hub_root": s_venv_hub_root,
@@ -365,18 +386,30 @@ class ProjectCore:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            print(f"CHYBA pri ukladaní configu: {e}")
+            print(f"CHYBA pri ukladaní konfigurácie: {e}")
 
-    def get_projects(self):
-        if not self.projects_root or not os.path.exists(self.projects_root): return []
+    # =========================================================================
+    # --- PROJEKTY A PROSTREDIA ---
+    # =========================================================================
+
+    def get_projects(self) -> list[str]:
+        """Vráti abecedne zoradený zoznam existujúcich priečinkov v koreni projektov."""
+        if not self.projects_root or not os.path.exists(self.projects_root):
+            return []
         try:
-            return sorted([d for d in os.listdir(self.projects_root) if os.path.isdir(Paths.get_project_path(self.projects_root, d))])
+            return sorted([
+                d for d in os.listdir(self.projects_root) 
+                if os.path.isdir(Paths.get_project_path(self.projects_root, d))
+            ])
         except OSError:
             return []
 
-    def get_venvs_for_active_project(self):
-        if not self.venv_hub_root or not self._active_project: return []
-        prefix = f"{self._active_project}_"; results = []
+    def get_venvs_for_active_project(self) -> list[dict]:
+        """Vráti zoznam virtuálnych prostredí priradených k aktívnemu projektu."""
+        if not self.venv_hub_root or not self._active_project:
+            return []
+        prefix = f"{self._active_project}_"
+        results = []
         if os.path.exists(self.venv_hub_root):
             try:
                 for d in os.listdir(self.venv_hub_root):
@@ -386,14 +419,21 @@ class ProjectCore:
                             if self.is_portable:
                                 PortablePathLogic.check_and_repair_venv_if_needed(v_path, self.local_packages_root)
                             version = self.get_python_version(v_path)
-                            results.append({"name": d.replace(prefix, "", 1), "path": v_path, "version": version})
+                            results.append({
+                                "name": d.replace(prefix, "", 1), 
+                                "path": v_path, 
+                                "version": version
+                            })
             except OSError:
                 pass
         return sorted(results, key=lambda x: x['name'])
 
-    def get_venvs_for_project(self, project_name):
-        if not self.venv_hub_root or not project_name: return []
-        prefix = f"{project_name}_"; results = []
+    def get_venvs_for_project(self, project_name: str) -> list[dict]:
+        """Vráti zoznam virtuálnych prostredí pre zadaný projekt."""
+        if not self.venv_hub_root or not project_name:
+            return []
+        prefix = f"{project_name}_"
+        results = []
         if os.path.exists(self.venv_hub_root):
             try:
                 venvs = sorted([d for d in os.listdir(self.venv_hub_root) if d.startswith(prefix)])
@@ -403,18 +443,24 @@ class ProjectCore:
                         if self.is_portable:
                             PortablePathLogic.check_and_repair_venv_if_needed(v_path, self.local_packages_root)
                         version = self.get_python_version(v_path)
-                        results.append({"name": d.replace(prefix, "", 1), "path": v_path, "version": version, "full_name": d})
+                        results.append({
+                            "name": d.replace(prefix, "", 1), 
+                            "path": v_path, 
+                            "version": version, 
+                            "full_name": d
+                        })
             except OSError:
                 pass
         return results
 
-    def get_python_version(self, venv_path):
+    def get_python_version(self, venv_path: str) -> str:
+        """Vyparsuje číslo verzie Pythonu priamo z pyvenv.cfg daného venvu."""
         cfg_path = Paths.get_pyvenv_cfg_path(venv_path)
         if os.path.exists(cfg_path):
             try:
                 with open(cfg_path, 'r', encoding='utf-8') as f:
                     match = re.search(r'version\s*=\s*([\d\.]+)', f.read())
                     return match.group(1) if match else "???"
-            except:
+            except Exception:
                 return "???"
         return "???"

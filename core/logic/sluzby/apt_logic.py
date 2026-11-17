@@ -11,7 +11,7 @@ from core._path import Paths
 from core.logic.commands.command_factory import PackageManagerFactory
 from core.logic.language_manager import LanguageManager
 from core.logic.sluzby.requirements_parser import RequirementsParser
-from core.logic.uv_detector import UVDetector
+from core.core_bridge import CoreBridge
 from contextlib import contextmanager
 
 
@@ -1180,6 +1180,7 @@ class AptLogic:
         return False
 
     @staticmethod
+    @staticmethod
     def get_editable_packages(venv_path: str, manager_type: str = "pip"):
         """
         Získa zoznam editovateľných balíčkov (inštalovaných cez 'pip install -e').
@@ -1189,7 +1190,7 @@ class AptLogic:
             return []
 
         if manager_type == "uv":
-            uv_exe = UVDetector.get_uv_path() or "uv"
+            uv_exe = CoreBridge.get_uv_path() or "uv"
             cmd = [uv_exe, "pip", "list", "--editable", "--format=json", "--python", python_exe]
         else:
             cmd = [python_exe, "-m", "pip", "list", "--editable", "--format=json"]
