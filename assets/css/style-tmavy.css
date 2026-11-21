@@ -412,3 +412,199 @@ body {
 }
 
 
+/* =========================================
+   ŠTÝLY PRE STRÁNKU FUNKCIÍ (FEATURES)
+========================================= */
+
+.features-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    margin-bottom: 60px;
+}
+
+.feature-detail-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.25s ease, border-color 0.25s ease;
+}
+
+.feature-detail-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.feature-img-wrapper {
+    width: 100%;
+    background-color: #07080c;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: center;
+    padding: 15px;
+}
+
+.feature-img-wrapper img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+.feature-content-wrapper {
+    padding: 25px 30px;
+}
+
+.feature-content-wrapper h3 {
+    margin: 10px 0;
+    font-size: 22px;
+    color: var(--text-main);
+}
+
+.feature-content-wrapper p {
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Verzionovacie odznaky */
+.feature-badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-current {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-upcoming {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.badge-planned {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--primary-color);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+@media (min-width: 992px) {
+    .feature-detail-card {
+        flex-direction: row;
+        align-items: center;
+    }
+    .feature-img-wrapper {
+        width: 55%;
+        border-bottom: none;
+        border-right: 1px solid var(--border-color);
+    }
+    .feature-content-wrapper {
+        width: 45%;
+        padding: 40px;
+    }
+}
+
+
+/* =========================================
+   PROMO BANNER PRE FUNKCIE NA HLAVNEJ STRÁNKE
+========================================= */
+
+.features-promo-banner {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(18, 22, 32, 0.95) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 14px;
+    padding: 24px 30px;
+    margin-bottom: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 25px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), inset 0 0 15px rgba(245, 158, 11, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.features-promo-banner::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--primary-color), var(--primary-hover));
+}
+
+.promo-badge {
+    display: inline-block;
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--primary-color);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.promo-content h3 {
+    margin: 0 0 6px 0;
+    font-size: 20px;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.promo-content p {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.promo-content strong {
+    color: #ffffff;
+}
+
+.promo-action {
+    flex-shrink: 0;
+}
+
+.promo-btn {
+    white-space: nowrap;
+    padding: 12px 24px;
+    font-size: 14px;
+}
+
+/* Responzivita pre mobilné zariadenia */
+@media (max-width: 768px) {
+    .features-promo-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 20px;
+        gap: 16px;
+    }
+
+    .promo-action {
+        width: 100%;
+    }
+
+    .promo-btn {
+        width: 100%;
+        text-align: center;
+        display: block;
+    }
+}
+
+

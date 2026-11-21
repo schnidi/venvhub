@@ -112,6 +112,22 @@ window.loadLanguage = async function(lang, pushToHistory = true) {
             fetchLatestGitHubRelease();
         }
 
+        // 8. Aktualizácia externých preklikov podľa aktuálneho jazyka
+        const navFeatures = document.getElementById('navFeaturesLink');
+        if (navFeatures) {
+            navFeatures.href = `features.html?lang=${lang}`;
+        }
+        const navManual = document.querySelector('a[data-i18n="nav_manual"]');
+        if (navManual) {
+            navManual.href = `manual/index-manual.html?lang=${lang}`;
+        }
+
+        // >>> PRIDANÝ RIADOK PRE TLAČIDLO V BANNERI <<<
+        const promoFeaturesBtn = document.getElementById('promoFeaturesBtn');
+        if (promoFeaturesBtn) {
+            promoFeaturesBtn.href = `features.html?lang=${lang}`;
+        }
+
     } catch (error) {
         console.error('Chyba načítania obsahu:', error);
         if (container) {

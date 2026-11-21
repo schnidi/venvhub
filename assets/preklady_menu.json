@@ -1,13 +1,15 @@
 {
   "sk": {
     "nav_home": "Domov",
-    "nav_about": "O programe",
+    "nav_features": "Funkcie",
+    "nav_about": "O projekte",
     "nav_manual": "Manuál",
     "nav_community": "Komunita"
   },
   "en": {
     "nav_home": "Home",
-    "nav_about": "Features",
+    "nav_features": "Features",
+    "nav_about": "About",
     "nav_manual": "Manual",
     "nav_community": "Community"
   }

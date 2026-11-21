@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VenvHub Pro - Funkcie a Roadmapa</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="assets/css/style-tmavy.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+    <!-- HORNA NAVIGAČNÁ LIŠTA -->
+    <header class="top-header">
+        <div class="nav-container">
+            <a href="index.html" class="brand-logo" id="homeLogoLink">
+                <img src="assets/icon/app.ico" alt="Logo" width="30" height="30">
+                <h1>VenvHub <span>Pro</span></h1>
+            </a>
+            
+            <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+
+            <ul class="nav-menu">
+                <li><a href="index.html" id="navHomeLink" data-i18n="nav_home">Domov</a></li>
+                <li><a href="features.html" class="active" data-i18n="nav_features">Funkcie</a></li>
+                <li><a href="manual/index-manual.html" id="navManualLink" data-i18n="nav_manual">Manuál</a></li>
+            </ul>
+
+            <div class="lang-switcher">
+                <button class="lang-btn" id="langBtn">🌐 <span id="currentLangLabel">Slovenčina</span></button>
+                <div class="lang-dropdown" id="langDropdown">
+                    <a href="#" data-lang="sk">Slovenčina</a>
+                    <a href="#" data-lang="en">English</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- DYNAMICKÝ OBSAH -->
+    <main class="main-wrapper" id="features-container">
+        <!-- Obsah sa načíta zo sk/features_text.html alebo en/features_text.html -->
+    </main>
+
+    <footer class="footer">
+        <p>&copy; Seal and Lube, spol. s r.o. | Autor: Ing. Viliam Schneider</p>
+    </footer>
+
+    <script src="assets/js/features_page.js"></script>
+</body>
+</html>
