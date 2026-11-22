@@ -1,19 +1,15 @@
 #----------------------------------------------------
 # Súbor: core/logic/pip_manager.py
-# Centrálna fasáda a spúšťač úloh pre balíčky (PyPI aj pip -e)
+# Centrálna fasáda a spúšťač úloh pre balíčky (PyPI, pip -e, requirements)
 #----------------------------------------------------
 
 import os
-import json
 import threading
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from core._path import Paths
 from core.core_bridge import CoreBridge
-from core.core_states import PackageOperationStatus, EditableOperationStatus
-from core.logic.birth_certificate import BirthCertificateGenerator
-from core.logic.sluzby.path_normalizer import PathNormalizer
-from core.logic.sluzby.apt_logic import AptLogic
+from core.core_states import PackageOperationStatus, EditableOperationStatus, RequirementsOperationStatus
 
 
 class PipSignalEmitter(QObject):
@@ -26,6 +22,12 @@ class EditableSignalEmitter(QObject):
     log_message = pyqtSignal(str)
     packages_loaded = pyqtSignal(list)
     finished_with_status = pyqtSignal(EditableOperationStatus)
+
+
+class RequirementsSignalEmitter(QObject):
+    log_message = pyqtSignal(str)
+    finished = pyqtSignal()
+    finished_with_status = pyqtSignal(RequirementsOperationStatus)
 
 
 class UniversalPackageWorker:
@@ -106,6 +108,33 @@ class UniversalEditableWorker:
             self.signals.log_message.emit(CoreBridge.translate("msg_done", "--- HOTOVO ---"))
 
 
+class RequirementsInstallWorker:
+    """Deleguje inštaláciu requirements.txt na centrálnu službu cez CoreBridge."""
+    def __init__(self, venv_path, project_root, manager_type="pip", core=None):
+        self.venv_path = venv_path
+        self.project_root = project_root
+        self.manager_type = manager_type
+        self.core = core
+        self.signals = RequirementsSignalEmitter()
+        self.status = RequirementsOperationStatus.ERROR
+
+    def run(self):
+        try:
+            self.status = CoreBridge.sync_requirements(
+                core=self.core,
+                venv_path=self.venv_path,
+                project_root=self.project_root,
+                log_callback=self.signals.log_message.emit
+            )
+        except Exception as e:
+            self.signals.log_message.emit(CoreBridge.translate("err_critical", "KRITICKÁ CHYBA: {0}").format(str(e)))
+            self.status = RequirementsOperationStatus.ERROR
+        finally:
+            self.signals.log_message.emit(CoreBridge.translate("msg_done", "--- HOTOVO ---"))
+            self.signals.finished_with_status.emit(self.status)
+            self.signals.finished.emit()
+
+
 class UpdateAllWorker:
     def __init__(self, venv_path, manager_type="pip", core=None):
         self.venv_path = venv_path
@@ -122,46 +151,6 @@ class UpdateAllWorker:
             log_callback=self.signals.log_message.emit
         )
         self.signals.finished.emit()
-
-
-class RequirementsInstallWorker:
-    def __init__(self, venv_path, project_root, manager_type="pip", core=None):
-        self.venv_path = venv_path
-        self.project_root = project_root
-        self.manager_type = manager_type
-        self.core = core
-        self.signals = PipSignalEmitter()
-        self.success = False
-
-    def run(self):
-        req_path = Paths.get_requirements_txt_path(self.project_root)
-        if not os.path.exists(req_path):
-            msg = CoreBridge.translate("err_req_not_found", "CHYBA: Súbor 'requirements.txt' nebol nájdený.")
-            self.signals.log_message.emit(msg)
-            self.signals.finished.emit()
-            return
-
-        try:
-            self.signals.log_message.emit(CoreBridge.translate("apt_requirements_sync_start", "\n--- Inicializujem požiadavky z requirements.txt (APT) ---"))
-            PathNormalizer.sanitize_requirements_file(req_path)
-
-            self.success = AptLogic.install_sync(
-                core=self.core,
-                venv_path=self.venv_path,
-                log_callback=self.signals.log_message.emit,
-                req_file_path=req_path
-            )
-
-            if self.success:
-                BirthCertificateGenerator.update_venv_certificate(self.venv_path)
-                self.signals.log_message.emit(CoreBridge.translate("msg_done", "--- HOTOVO ---"))
-            else:
-                self.signals.log_message.emit(CoreBridge.translate("apt_requirements_sync_fail", "⚠️ Synchronizácia požiadaviek nebola úspešná."))
-
-        except Exception as e:
-            self.signals.log_message.emit(CoreBridge.translate("err_critical", "KRITICKÁ CHYBA: {0}").format(str(e)))
-        finally:
-            self.signals.finished.emit()
 
 
 class PipManager:
@@ -187,32 +176,31 @@ class PipManager:
     @staticmethod
     def install_package(venv_path, package_name, log_widget, manager_type="pip", core=None, on_finished=None):
         if not core:
-            if log_widget: log_widget.append("CHYBA: Interná chyba - chýba objekt 'core'.")
+            if log_widget: log_widget.append(CoreBridge.translate("err_core_missing", "❌ KRITICKÁ CHYBA: Chýba objekt 'core'."))
             return
             
         worker = UniversalPackageWorker("install", core, venv_path, [package_name], manager_type)
-        
         if on_finished:
             worker.signals.finished_with_status.connect(on_finished)
-            
         PipManager._run_pip_task(worker, log_widget)
         
     @staticmethod
     def uninstall_package(venv_path, package_name, log_widget, manager_type="pip", core=None, on_finished=None):
         if not core:
-            if log_widget: log_widget.append("CHYBA: Interná chyba - chýba objekt 'core'.")
+            if log_widget: log_widget.append(CoreBridge.translate("err_core_missing", "❌ KRITICKÁ CHYBA: Chýba objekt 'core'."))
             return
             
         worker = UniversalPackageWorker("uninstall", core, venv_path, [package_name], manager_type)
-        
         if on_finished:
             worker.signals.finished_with_status.connect(on_finished)
-            
         PipManager._run_pip_task(worker, log_widget)
 
     @staticmethod
-    def install_requirements(venv_path, project_root, log_widget, manager_type="pip", core=None):
+    def install_requirements(venv_path, project_root, log_widget, manager_type="pip", core=None, on_finished=None):
+        """Asynchrónna synchronizácia requirements.txt cez REQUIREMENTS_SYNC službu."""
         worker = RequirementsInstallWorker(venv_path, project_root, manager_type, core)
+        if on_finished:
+            worker.signals.finished_with_status.connect(on_finished)
         PipManager._run_pip_task(worker, log_widget)
 
     @staticmethod
@@ -223,19 +211,16 @@ class PipManager:
     # --- EDITOVATEĽNÉ BALÍČKY (pip -e) ---
     @staticmethod
     def list_editable_packages(venv_path, manager_type, on_loaded, log_widget=None):
-        """Asynchrónne načíta zoznam editovateľných balíčkov."""
         worker = UniversalEditableWorker("list", core=None, venv_path=venv_path, manager_type=manager_type)
         worker.signals.packages_loaded.connect(on_loaded)
         PipManager._run_pip_task(worker, log_widget)
 
     @staticmethod
     def install_editable(core, venv_path, target_path, log_widget, manager_type="pip"):
-        """Asynchrónne nainštaluje editovateľný balíček cez EDITABLE_OPERATIONS."""
         worker = UniversalEditableWorker("install", core, venv_path, target_or_pkg=target_path, manager_type=manager_type)
         PipManager._run_pip_task(worker, log_widget)
 
     @staticmethod
     def uninstall_editable(core, venv_path, package_name, log_widget, manager_type="pip"):
-        """Asynchrónne odinštaluje editovateľný balíček cez EDITABLE_OPERATIONS s autoremove."""
         worker = UniversalEditableWorker("uninstall", core, venv_path, target_or_pkg=package_name, manager_type=manager_type)
         PipManager._run_pip_task(worker, log_widget)

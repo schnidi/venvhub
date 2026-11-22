@@ -3,15 +3,16 @@
 #----------------------------------------
 
 import os
-from PyQt6.QtWidgets import QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtCore import QObject, pyqtSignal, QSize
 from PyQt6.QtGui import QIcon
+
 from core._path import Paths
-from core.logic.language_manager import LanguageManager
 from core.logic.ide_detector import IDEDetector
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- MOSTY (JAZYK AJ DIALÓGY) - ZERO COUPLING ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 
 class _IDESignals(QObject):
@@ -56,8 +57,8 @@ class IDESettingsHandler:
         """Vráti lokalizovaný tooltip pre tlačidlo editora."""
         active = getattr(core, "active_ide", "vscode")
         if active == "cursor":
-            return LanguageManager.get("tip_open_cursor", "Otvoriť projekt v Cursor AI")
-        return LanguageManager.get("tip_open_vscode", "Otvoriť projekt vo VS Code")
+            return LanguageBridge.translate("tip_open_cursor", "Otvoriť projekt v Cursor AI")
+        return LanguageBridge.translate("tip_open_vscode", "Otvoriť projekt vo VS Code")
 
     @classmethod
     def is_active_ide_ready(cls, core) -> bool:
@@ -175,17 +176,17 @@ class IDESettingsHandler:
 
         # 1. Položka: Visual Studio Code
         if has_vscode:
-            name_vscode = LanguageManager.get("opt_ide_vscode", "Visual Studio Code")
+            name_vscode = LanguageBridge.translate("opt_ide_vscode", "Visual Studio Code")
             combo_widget.addItem(f"🟦 {name_vscode}", "vscode")
 
         # 2. Položka: Cursor AI
         if has_cursor:
-            name_cursor = LanguageManager.get("opt_ide_cursor", "Cursor AI")
+            name_cursor = LanguageBridge.translate("opt_ide_cursor", "Cursor AI")
             combo_widget.addItem(f"⚡ {name_cursor}", "cursor")
 
         # 3. Ak nie je dostupný žiadny editor
         if combo_widget.count() == 0:
-            none_text = LanguageManager.get("opt_ide_none", "--- Žiadny editor nenájdený ---")
+            none_text = LanguageBridge.translate("opt_ide_none", "--- Žiadny editor nenájdený ---")
             combo_widget.addItem(none_text, "")
             combo_widget.setEnabled(False)
         else:
@@ -231,11 +232,11 @@ class IDESettingsHandler:
         Overí prítomnosť spustiteľného súboru, zapíše do core a osvieži UI.
         """
         if ide_type == "vscode":
-            title = LanguageManager.get("dialog_select_portable_vscode", "Vyberte priečinok s prenosným VS Code")
+            title = LanguageBridge.translate("dialog_select_portable_vscode", "Vyberte priečinok s prenosným VS Code")
             expected_files = ["code.cmd", "code.exe", "Code.exe"]
             target_attr = "portable_vscode_path"
         else:
-            title = LanguageManager.get("dialog_select_portable_cursor", "Vyberte priečinok s prenosným Cursor AI")
+            title = LanguageBridge.translate("dialog_select_portable_cursor", "Vyberte priečinok s prenosným Cursor AI")
             expected_files = ["cursor.cmd", "cursor.exe", "Cursor.exe"]
             target_attr = "portable_cursor_path"
 
@@ -263,11 +264,11 @@ class IDESettingsHandler:
                 break
 
         if not found_executable:
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(
                 parent_window,
-                LanguageManager.get("title_warning", "Upozornenie"),
-                LanguageManager.get(
+                LanguageBridge.translate("title_warning", "Upozornenie"),
+                LanguageBridge.translate(
                     "msg_portable_ide_not_found",
                     "Vo vybranom priečinku sa nenašiel spustiteľný súbor pre {0}.\n\nCesta bola napriek tomu uložená."
                 ).format(ide_type.upper())

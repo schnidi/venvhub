@@ -1,26 +1,25 @@
 #----------------------------------------
 # Súbor: core/logic/button/manager/delete.py
+# Logika a asynchrónny worker pre bezpečné mazanie virtuálnych prostredí.
+# Plne prepojené na DialogBridge a LanguageBridge (0 priamych väzieb na windows/).
 #----------------------------------------
 
 import os
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
-from core.logic.language_manager import LanguageManager
 from core._path import Paths
 from core.logic.vs_code_json import VSCodeIntegration
-
-# Importujeme službu na mazanie a NÁŠ VLASTNÝ PROGRESS DIALOG
 from core.logic.sluzby.copy_del import CopyDelService
-from windows.progress_dialog import ProgressDialog
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 
 class DeleteWorker(QThread):
     progress = pyqtSignal(int)
-    log_msg = pyqtSignal(str) # Pridali sme logy
+    log_msg = pyqtSignal(str)
     finished_signal = pyqtSignal(dict)
 
     def __init__(self, venv_path):
@@ -41,11 +40,11 @@ class DeleteHandler:
     def run(core, venv_path, parent_window):
         name = os.path.basename(venv_path)
         
-        title = LanguageManager.get("title_delete", "Zmazať?")
-        msg = LanguageManager.get("msg_confirm_delete", "Naozaj chcete úplne vymazať venv:\n{0}?").format(name)
+        title = LanguageBridge.translate("title_delete", "Zmazať?")
+        msg = LanguageBridge.translate("msg_confirm_delete", "Naozaj chcete úplne vymazať venv:\n{0}?").format(name)
         
-        # --- ZMENA NA NAŠU LIŠTU ---
-        confirm = CustomMessageBox.question(
+        # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+        confirm = DialogBridge.question(
             parent_window, 
             title, 
             msg,
@@ -54,16 +53,16 @@ class DeleteHandler:
         
         if confirm == QMessageBox.StandardButton.Yes:
             
-            # 1. Použijeme NÁŠ vlastný ProgressDialog miesto starého Windowsu
-            progress_title = LanguageManager.get("title_deleting", "Prebieha mazanie...")
-            progress_msg = LanguageManager.get("msg_deleting_progress", "Mažem: {0}").format(name)
+            progress_title = LanguageBridge.translate("title_deleting", "Prebieha mazanie...")
+            progress_msg = LanguageBridge.translate("msg_deleting_progress", "Mažem: {0}").format(name)
             
-            progress_dialog = ProgressDialog(parent_window)
+            # --- PROGRESS DIALOG CEZ DIALOG BRIDGE ---
+            progress_dialog = DialogBridge.progress_dialog(parent_window)
             progress_dialog.setWindowTitle(progress_title)
             progress_dialog.set_message(progress_msg)
             progress_dialog.set_progress_mode(indeterminate=False) # Ukazuje presne 0-100%
             
-            # 2. Vytvoríme a spustíme vlákno pre zmazanie
+            # Vytvoríme a spustíme vlákno pre zmazanie
             parent_window._delete_worker = DeleteWorker(venv_path)
 
             def on_finished(result):
@@ -79,13 +78,14 @@ class DeleteHandler:
                     parent_window.refresh_table()
                     parent_window.config_changed.emit()
                 else:
-                    title_err = LanguageManager.get("title_error", "Chyba")
+                    title_err = LanguageBridge.translate("title_error", "Chyba")
                     error_reason = result.get("error", "Neznáma chyba")
-                    msg_err = LanguageManager.get("msg_delete_failed", "Nepodarilo sa zmazať: {0}").format(error_reason)
-                    # --- ZMENA NA NAŠU LIŠTU ---
-                    CustomMessageBox.critical(parent_window, title_err, msg_err)
+                    msg_err = LanguageBridge.translate("msg_delete_failed", "Nepodarilo sa zmazať: {0}").format(error_reason)
+                    
+                    # --- KRITICKÁ CHYBA CEZ DIALOG BRIDGE ---
+                    DialogBridge.critical(parent_window, title_err, msg_err)
 
-            # 3. Prepojíme signály z vlákna s naším oknom (percentá aj text)
+            # Prepojíme signály z vlákna s naším oknom (percentá aj text)
             parent_window._delete_worker.progress.connect(progress_dialog.set_progress_value)
             parent_window._delete_worker.log_msg.connect(progress_dialog.add_log_message)
             parent_window._delete_worker.finished_signal.connect(on_finished)

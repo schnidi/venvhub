@@ -1,5 +1,7 @@
 #----------------------------------------
 # Súbor: core/logic/python_installer/box/python_ver_json.py
+# Správa JSONL zoznamu Python verzií pre inštalátor.
+# Plne prepojené na DialogBridge a LanguageBridge (0 priamych väzieb na windows/).
 #----------------------------------------
 
 import os
@@ -7,11 +9,11 @@ import json
 import ctypes
 from PyQt6.QtWidgets import QComboBox
 from PyQt6.QtCore import QObject, QFileSystemWatcher
-from core.logic.language_manager import LanguageManager
 from core._path import Paths 
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 class PythonVersionJsonManager(QObject):
     def __init__(self, combo_urls: QComboBox):
@@ -39,7 +41,7 @@ class PythonVersionJsonManager(QObject):
         """
         self.combo_urls.clear()
         
-        self.combo_urls.addItem(LanguageManager.get("combo_select_version", "-- Vyberte verziu zo zoznamu --"), userData="")
+        self.combo_urls.addItem(LanguageBridge.translate("combo_select_version", "-- Vyberte verziu zo zoznamu --"), userData="")
 
         if not os.path.exists(self.jsonl_path):
             print(f"Upozornenie: Súbor {self.jsonl_path} nebol nájdený.")
@@ -54,7 +56,7 @@ class PythonVersionJsonManager(QObject):
                     
                     try:
                         data = json.loads(line)
-                        name = data.get("name", LanguageManager.get("txt_unknown_version", "Neznáma verzia"))
+                        name = data.get("name", LanguageBridge.translate("txt_unknown_version", "Neznáma verzia"))
                         url = data.get("url", "")
                         
                         self.combo_urls.addItem(name, userData=url)
@@ -95,11 +97,11 @@ class PythonVersionJsonManager(QObject):
             
             if result <= 32:
                 if parent_widget:
-                    # --- ZMENA NA NAŠU LIŠTU ---
-                    CustomMessageBox.warning(
+                    # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+                    DialogBridge.warning(
                         parent_widget,
-                        LanguageManager.get("title_access_denied", "Prístup odmietnutý"),
-                        LanguageManager.get("msg_admin_rights_required", "Pre úpravu tohto súboru sú potrebné administrátorské práva.\nÚprava bola zrušená.")
+                        LanguageBridge.translate("title_access_denied", "Prístup odmietnutý"),
+                        LanguageBridge.translate("msg_admin_rights_required", "Pre úpravu tohto súboru sú potrebné administrátorské práva.\nÚprava bola zrušená.")
                     )
                 else:
                     print("UAC zamietnuté alebo chyba pri spúšťaní Notepadu.")

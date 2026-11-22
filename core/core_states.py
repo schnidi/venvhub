@@ -17,6 +17,7 @@ class CoreService(str, Enum):
     PORTABILITY_GUARD = "PORTABILITY_GUARD"
     PYTHON_DETECTOR = "PYTHON_DETECTOR"
     UV_DETECTOR = "UV_DETECTOR"
+    REQUIREMENTS_SYNC = "REQUIREMENTS_SYNC"
 
 class IDEType(str, Enum):
     """Typ editora."""
@@ -155,4 +156,17 @@ class PythonDetectorStatus(str, Enum):
     FALLBACK_ONLY = "FALLBACK_ONLY"     # Nenašiel sa žiadny systémový, použitý len sys.executable
     NO_PYTHONS_FOUND = "NO_PYTHONS_FOUND" # Kritický stav - nenašiel sa žiadny interpreter
     ERROR = "ERROR"                     # Chyba pri skenovaní OS
+
+
+# ====================================================
+# STAVY PRE REQUIREMENTS.TXT (REQUIREMENTS_SYNC)
+# ====================================================
+
+class RequirementsOperationStatus(str, Enum):
+    """Výsledok operácie synchronizácie requirements.txt."""
+    SUCCESS = "SUCCESS"                                 # Súbor aj venv sú 100% zosúladené
+    SKIPPED = "SKIPPED"                                 # Stav 1:1, netreba nič inštalovať ani mazať
+    SUCCESS_WITH_CONFLICTS = "SUCCESS_WITH_CONFLICTS"   # Zbehlo, ale pip/uv check našiel konflikty
+    FILE_NOT_FOUND = "FILE_NOT_FOUND"                   # Súbor requirements.txt vôbec neexistuje
+    ERROR = "ERROR"                                     # Kritické zlyhanie (chyba kompilácie, syntax v súbore)
 

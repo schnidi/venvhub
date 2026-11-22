@@ -1,20 +1,22 @@
 #----------------------------------------
 # Súbor: core/logic/py_installer/buttons/assets_buttons.py
+# Logika pre správu súborov a priečinkov v PyInstaller Builderi.
+# Plne prepojené na DialogBridge a LanguageBridge (0 priamych väzieb na windows/).
 #----------------------------------------
 
 import os
 from PyQt6.QtWidgets import QFileDialog, QTableWidgetItem
-from core.logic.language_manager import LanguageManager
 from core._path import Paths
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 class AssetsButtonsHandler:
     
     @staticmethod
     def add_file(window):
-        title = LanguageManager.get("dialog_add_data_file", "Pridať súbor")
+        title = LanguageBridge.translate("dialog_add_data_file", "Pridať súbor")
         
         current_dir = ""
         active_project = window.combo_project.currentText()
@@ -31,7 +33,7 @@ class AssetsButtonsHandler:
 
     @staticmethod
     def add_dir(window):
-        title = LanguageManager.get("dialog_add_data_dir", "Pridať priečinok")
+        title = LanguageBridge.translate("dialog_add_data_dir", "Pridať priečinok")
         
         current_dir = ""
         active_project = window.combo_project.currentText()
@@ -52,11 +54,14 @@ class AssetsButtonsHandler:
                 
                 # Ak cesta začína na "..", používateľ vybral priečinok mimo projektu
                 if relative_path.startswith(".."):
-                    # --- ZMENA NA NAŠU LIŠTU ---
-                    CustomMessageBox.warning(
+                    # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+                    DialogBridge.warning(
                         window,
-                        LanguageManager.get("title_warning_outside_project", "Pozor - Mimo projektu!"),
-                        LanguageManager.get("msg_folder_outside_project_detail", "Vybraný priečinok sa nenachádza v aktuálnom projekte '{0}'.\n\nOčakávaný koreň: {1}\nVybrali ste: {2}\n\nAkcia bola zrušená.").format(project_name, project_root, dir_path_norm)
+                        LanguageBridge.translate("title_warning_outside_project", "Pozor - Mimo projektu!"),
+                        LanguageBridge.translate(
+                            "msg_folder_outside_project_detail", 
+                            "Vybraný priečinok sa nenachádza v aktuálnom projekte '{0}'.\n\nOčakávaný koreň: {1}\nVybrali ste: {2}\n\nAkcia bola zrušená."
+                        ).format(project_name, project_root, dir_path_norm)
                     )
                     return
                 
@@ -65,11 +70,11 @@ class AssetsButtonsHandler:
                 
             except ValueError:
                 # Ak je priečinok na úplne inom disku
-                # --- ZMENA NA NAŠU LIŠTU ---
-                CustomMessageBox.critical(
+                # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+                DialogBridge.critical(
                     window, 
-                    LanguageManager.get("title_critical_error", "Kritická Chyba"), 
-                    LanguageManager.get("msg_folder_on_different_drive", "Vybraný priečinok sa nachádza na inom disku ako aktuálny projekt!\nAkcia bola zrušená.")
+                    LanguageBridge.translate("title_critical_error", "Kritická Chyba"), 
+                    LanguageBridge.translate("msg_folder_on_different_drive", "Vybraný priečinok sa nachádza na inom disku ako aktuálny projekt!\nAkcia bola zrušená.")
                 )
                 return
 

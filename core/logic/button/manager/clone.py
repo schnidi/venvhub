@@ -2,7 +2,7 @@
 # Súbor: core/logic/button/manager/clone.py
 # Logika a asynchrónny worker pre klonovanie a zálohovanie virtuálnych prostredí.
 # Podporuje prenos balíčkov, hookov, APT stavu a izoláciu podľa typu prostredia.
-# Plne prepojené na mostík jadra CoreBridge.
+# Plne prepojené na LanguageBridge, DialogBridge a CoreBridge.
 #-------------------------------------------------------------------------------
 
 """
@@ -30,8 +30,9 @@ from core.logic.commands.command_factory import PackageManagerFactory
 from core.logic.sluzby.log_print_desktop import DesktopLogger
 from core.logic.sluzby.embed_python_created import EmbedPythonCreated
 
-from windows.progress_dialog import ProgressDialog
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 LOGGING_ENABLED = False
 clone_logger = DesktopLogger(is_enabled=LOGGING_ENABLED, filename="VENV_CLONE_LOG.txt")
@@ -56,18 +57,6 @@ class CloneWorker(QObject):
         manager_type: str = "pip", 
         local_packages_root: str = ""
     ):
-        """
-        Inicializuje workera pre klonovanie prostredia.
-
-        Args:
-            source_venv_path (str): Cesta k pôvodnému (klonovanému) venvu.
-            target_venv_path (str): Cesta k novému klonu.
-            is_embed (bool): True ak pôvodný venv vznikol z embed Pythonu.
-            parent_python (str): Cesta k materskému Pythonu pôvodného venvu.
-            project_name (str): Názov aktuálneho projektu.
-            manager_type (str): Zvolený správca balíčkov ("pip" alebo "uv").
-            local_packages_root (str): Cesta k lokálnym vývojovým balíčkom.
-        """
         super().__init__()
         self.source_venv_path = source_venv_path
         self.target_venv_path = target_venv_path
@@ -153,13 +142,13 @@ class CloneWorker(QObject):
                     clone_logger.write(f"Nepodarilo sa skopírovať {file_name}: {e}")
                     
         if has_local:
-            msg_local = CoreBridge.translate(
+            msg_local = LanguageBridge.translate(
                 "clone_local_pkgs_transferred", "🔗 Lokálne balíčky (VenvHub Hook) boli úspešne prenesené."
             )
             self.progress_msg.emit(msg_local)
             
         if has_apt:
-            msg_apt = CoreBridge.translate(
+            msg_apt = LanguageBridge.translate(
                 "clone_apt_state_transferred", "🧠 APT história a pravidlá závislostí boli úspešne prenesené."
             )
             self.progress_msg.emit(msg_apt)
@@ -175,7 +164,7 @@ class CloneWorker(QObject):
             source_python = Paths.get_venv_python_exe_path(self.source_venv_path)
 
             # 1. Freeze balíčkov zo zdrojového venvu
-            msg_getting = CoreBridge.translate("clone_getting_pkgs", "Získavam zoznam balíčkov (freeze)...")
+            msg_getting = LanguageBridge.translate("clone_getting_pkgs", "Získavam zoznam balíčkov (freeze)...")
             self.progress_msg.emit(msg_getting)
             
             source_dispatcher = PackageManagerFactory.get_dispatcher(self.manager_type, self.source_venv_path)
@@ -191,7 +180,7 @@ class CloneWorker(QObject):
                 raise Exception("Príkaz freeze neodpovedal v časovom limite (30s)!")
 
             if freeze_proc.returncode != 0:
-                err_freeze = CoreBridge.translate("clone_err_freeze", "Chyba pri 'freeze': {0}").format(freeze_proc.stderr)
+                err_freeze = LanguageBridge.translate("clone_err_freeze", "Chyba pri 'freeze': {0}").format(freeze_proc.stderr)
                 raise Exception(err_freeze)
 
             filtered_reqs = []
@@ -212,17 +201,17 @@ class CloneWorker(QObject):
             requirements_data = "\n".join(filtered_reqs)
             clone_logger.write(f"Filtrované balíčky:\n{requirements_data}")
 
-            fmt_creating = CoreBridge.translate("clone_creating_venv", "Vytváram nové prostredie: {0}...")
+            fmt_creating = LanguageBridge.translate("clone_creating_venv", "Vytváram nové prostredie: {0}...")
             self.progress_msg.emit(fmt_creating.format(os.path.basename(self.target_venv_path)))
             
             # 2. Vytvorenie cieľového prostredia
             if self.is_embed:
                 if self.parent_python and os.path.exists(self.parent_python):
-                    plan_a = CoreBridge.translate("clone_plan_a", "Používam rýchle klonovanie (rodičovský Python)...")
+                    plan_a = LanguageBridge.translate("clone_plan_a", "Používam rýchle klonovanie (rodičovský Python)...")
                     self.progress_msg.emit(plan_a)
                     create_cmd = [self.parent_python, "-m", "virtualenv", "--no-download", self.target_venv_path]
                 else:
-                    plan_b = CoreBridge.translate("clone_plan_b", "Pripravujem pôvodné prostredie (inštalujem virtualenv)...")
+                    plan_b = LanguageBridge.translate("clone_plan_b", "Pripravujem pôvodné prostredie (inštalujem virtualenv)...")
                     self.progress_msg.emit(plan_b)
                     inject_cmd = [source_python, "-m", "pip", "install", "virtualenv"]
                     ret_code, _ = self._stream_subprocess(inject_cmd, "INJECT_VIRTUALENV")
@@ -234,22 +223,22 @@ class CloneWorker(QObject):
 
                 ret_code, err_txt = self._stream_subprocess(create_cmd, "CREATE_VENV_EMBED")
                 if ret_code != 0:
-                    err_embed = CoreBridge.translate("clone_err_create_embed", "Chyba pri vytváraní venv (virtualenv):\n{0}")
+                    err_embed = LanguageBridge.translate("clone_err_create_embed", "Chyba pri vytváraní venv (virtualenv):\n{0}")
                     raise Exception(err_embed.format(err_txt))
 
-                self.progress_msg.emit(CoreBridge.translate("clone_fixing_pth", "Opravujem konfiguráciu (._pth)..."))
+                self.progress_msg.emit(LanguageBridge.translate("clone_fixing_pth", "Opravujem konfiguráciu (._pth)..."))
                 EmbedPythonCreated.fix_pth_file(self.target_venv_path, source_python)
                 
-                self.progress_msg.emit(CoreBridge.translate("clone_verifying_pip", "Overujem funkčnosť PIP..."))
+                self.progress_msg.emit(LanguageBridge.translate("clone_verifying_pip", "Overujem funkčnosť PIP..."))
                 if not EmbedPythonCreated.verify_pip_functional(self.target_venv_path):
-                    raise Exception(CoreBridge.translate("clone_err_pip_verify", "PIP v novom prostredí nefunguje!"))
+                    raise Exception(LanguageBridge.translate("clone_err_pip_verify", "PIP v novom prostredí nefunguje!"))
 
             else:
-                self.progress_msg.emit(CoreBridge.translate("clone_creating_system", "Vytváram venv (metóda pre systémový Python)..."))
+                self.progress_msg.emit(LanguageBridge.translate("clone_creating_system", "Vytváram venv (metóda pre systémový Python)..."))
                 create_cmd = [source_python, "-m", "venv", self.target_venv_path]
                 ret_code, err_txt = self._stream_subprocess(create_cmd, "CREATE_VENV_SYSTEM")
                 if ret_code != 0:
-                    err_system = CoreBridge.translate("clone_err_create_system", "Chyba pri vytváraní venv:\n{0}")
+                    err_system = LanguageBridge.translate("clone_err_create_system", "Chyba pri vytváraní venv:\n{0}")
                     raise Exception(err_system.format(err_txt))
 
             # 3. Inštalácia štandardných balíčkov
@@ -257,7 +246,7 @@ class CloneWorker(QObject):
             target_dispatcher = PackageManagerFactory.get_dispatcher(self.manager_type, self.target_venv_path)
             
             if requirements_data.strip():
-                msg_installing = CoreBridge.translate(
+                msg_installing = LanguageBridge.translate(
                     "clone_installing_pkgs", "\n--- SŤAHUJEM A INŠTALUJEM BALÍČKY (čakajte prosím) ---"
                 )
                 self.progress_msg.emit(msg_installing)
@@ -282,7 +271,7 @@ class CloneWorker(QObject):
 
                 if ret_code != 0:
                     short_err = err_txt[-1500:] if len(err_txt) > 1500 else err_txt
-                    err_inst = CoreBridge.translate("clone_err_install", "Chyba pri inštalácii balíčkov:\n{0}")
+                    err_inst = LanguageBridge.translate("clone_err_install", "Chyba pri inštalácii balíčkov:\n{0}")
                     raise Exception(err_inst.format(short_err))
 
             # 3.5. Inštalácia editovateľných balíčkov (pip -e)
@@ -298,7 +287,7 @@ class CloneWorker(QObject):
             self._clone_local_packages()
 
             # 5. Zápis rodného listu
-            self.progress_msg.emit(CoreBridge.translate("clone_finalizing", "\nZapisujem rodný list prostredia..."))
+            self.progress_msg.emit(LanguageBridge.translate("clone_finalizing", "\nZapisujem rodný list prostredia..."))
             
             source_path_for_json = None
             if self.is_embed:
@@ -339,10 +328,6 @@ class CloneHandler:
 
     @staticmethod
     def _analyze_source(source_venv_path: str) -> tuple[bool, str | None]:
-        """
-        Analyzuje zdrojové prostredie:
-        Zistí materský Python buď cez rodný list, alebo cez CoreBridge.resolve_parent_python().
-        """
         parent_python = None
         cert_path = os.path.join(source_venv_path, "venv_birth_certificate.json")
         if os.path.exists(cert_path):
@@ -387,7 +372,7 @@ class CloneHandler:
 
         # 1. KONTROLA PRENOSNOSTI PRED ZOBRAZENÍM DIALÓGU
         if not CoreBridge.verify_venv_access(source_venv_path):
-            CustomMessageBox.show_portability_blocked(parent, os.path.basename(source_venv_path))
+            DialogBridge.show_portability_blocked(parent, os.path.basename(source_venv_path))
             return
 
         venv_name = os.path.basename(source_venv_path)
@@ -397,8 +382,8 @@ class CloneHandler:
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M")
         default_new_name = f"{clean_name}_backup_{now}"
 
-        title = CoreBridge.translate("clone_dialog_title", "Klonovať / Zálohovať Venv")
-        label = CoreBridge.translate("clone_dialog_label", "Zadajte názov pre kópiu prostredia '{0}':").format(clean_name)
+        title = LanguageBridge.translate("clone_dialog_title", "Klonovať / Zálohovať Venv")
+        label = LanguageBridge.translate("clone_dialog_label", "Zadajte názov pre kópiu prostredia '{0}':").format(clean_name)
         
         new_name, ok = QInputDialog.getText(parent, title, label, text=default_new_name)
 
@@ -411,15 +396,16 @@ class CloneHandler:
         target_path = Paths.get_venv_path(core.venv_hub_root, full_new_folder_name)
 
         if os.path.exists(target_path):
-            err_title = CoreBridge.translate("title_error", "Chyba")
-            err_msg = CoreBridge.translate("msg_venv_exists", "Prostredie '{0}' už existuje!").format(full_new_folder_name)
-            CustomMessageBox.warning(parent, err_title, err_msg)
+            err_title = LanguageBridge.translate("title_error", "Chyba")
+            err_msg = LanguageBridge.translate("msg_venv_exists", "Prostredie '{0}' už existuje!").format(full_new_folder_name)
+            DialogBridge.warning(parent, err_title, err_msg)
             return
 
         is_embed, parent_python = CloneHandler._analyze_source(source_venv_path)
 
-        progress = ProgressDialog(parent)
-        progress.add_log_message(CoreBridge.translate("clone_preparing", "Pripravujem klonovanie..."))
+        # ProgressDialog čistou delegáciou cez DialogBridge
+        progress = DialogBridge.progress_dialog(parent)
+        progress.add_log_message(LanguageBridge.translate("clone_preparing", "Pripravujem klonovanie..."))
         
         CloneHandler._thread = QThread()
         CloneHandler._worker = CloneWorker(
@@ -438,9 +424,9 @@ class CloneHandler:
         
         def on_error(err):
             progress.accept()
-            err_title = CoreBridge.translate("clone_err_title", "Chyba klonovania")
-            err_msg = CoreBridge.translate("clone_err_generic", "Nastala chyba:\n{0}").format(err)
-            CustomMessageBox.critical(parent, err_title, err_msg)
+            err_title = LanguageBridge.translate("clone_err_title", "Chyba klonovania")
+            err_msg = LanguageBridge.translate("clone_err_generic", "Nastala chyba:\n{0}").format(err)
+            DialogBridge.critical(parent, err_title, err_msg)
 
         CloneHandler._worker.error.connect(on_error, Qt.ConnectionType.QueuedConnection)
         

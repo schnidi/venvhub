@@ -2,7 +2,7 @@
 # Súbor: core/logic/button/manager/create.py
 # Logika a asynchrónny worker pre vytváranie nových virtuálnych prostredí (Venv).
 # Podporuje štandardný venv aj špeciálny virtualenv režim pre Embed Python.
-# Plne prepojené na centrálny mostík CoreBridge.
+# Plne prepojené na centrálny mostík CoreBridge, DialogBridge a LanguageBridge.
 #-------------------------------------------------------------------------------
 
 """
@@ -28,8 +28,9 @@ from core.logic.sluzby.log_print_desktop import DesktopLogger
 from core.logic.sluzby.embed_python_created import EmbedPythonCreated
 from core.logic.sluzby.apt_logic import AptLogic
 
-from windows.progress_dialog import ProgressDialog
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS PRIAMO V LOGIKE) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 LOGGING_ENABLED = False
 create_logger = DesktopLogger(is_enabled=LOGGING_ENABLED, filename="VENV_CREATE_LOG.txt")
@@ -53,17 +54,6 @@ class VenvCreatorWorker(QObject):
         project_name: str = "",
         parent_py_path: str = "",
     ):
-        """
-        Inicializuje workera pre vytvorenie prostredia.
-
-        Args:
-            python_exe (str): Cesta k vybranému spustiteľnému súboru Pythonu.
-            venv_path (str): Cieľová cesta k vytváranej zložke venvu.
-            is_local (bool): True ak ide o lokálny (embed) Python z PyRuntimes.
-            is_portable (bool): True ak aplikácia beží v USB prenosnom režime.
-            project_name (str): Názov aktuálneho projektu.
-            parent_py_path (str): Relatívna alebo absolútna cesta k materskému Pythonu.
-        """
         super().__init__()
         self.python_exe = os.path.normpath(python_exe)
         self.venv_path = os.path.normpath(venv_path)
@@ -78,7 +68,6 @@ class VenvCreatorWorker(QObject):
         CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
         create_logger.write(f"\nŠTART PROCESU: {self.python_exe} -> {self.venv_path}")
 
-        # Očistíme premenné prostredia od kolíznych hodnôt
         clean_env = os.environ.copy()
         clean_env.pop("PYTHONPATH", None)
         clean_env.pop("PYTHONHOME", None)
@@ -91,7 +80,7 @@ class VenvCreatorWorker(QObject):
         try:
             # --- 1. VYTVORENIE VENVU PODĽA TYPU PYTHONU ---
             if self.is_local:
-                msg_step1 = CoreBridge.translate(
+                msg_step1 = LanguageBridge.translate(
                     "msg_create_step1_virtualenv", "Krok 1: Spúšťam virtualenv pre lokálny embed..."
                 )
                 self.progress_log.emit(msg_step1)
@@ -118,13 +107,13 @@ class VenvCreatorWorker(QObject):
                 if result.returncode != 0:
                     raise RuntimeError(f"virtualenv zlyhal s kódom {result.returncode}:\n{result.stderr}")
 
-                msg_step2 = CoreBridge.translate(
+                msg_step2 = LanguageBridge.translate(
                     "msg_create_step2_pth", "Krok 2: Opravujem konfiguráciu (._pth)..."
                 )
                 self.progress_log.emit(msg_step2)
                 EmbedPythonCreated.fix_pth_file(self.venv_path, self.python_exe)
 
-                msg_step3 = CoreBridge.translate(
+                msg_step3 = LanguageBridge.translate(
                     "msg_create_step3_pip", "Krok 3: Overujem funkčnosť PIP..."
                 )
                 self.progress_log.emit(msg_step3)
@@ -132,7 +121,7 @@ class VenvCreatorWorker(QObject):
                     raise RuntimeError("PIP bol vytvorený, ale nefunguje (Access Violation / poškodené binárky).")
 
             else:
-                msg_std = CoreBridge.translate(
+                msg_std = LanguageBridge.translate(
                     "msg_create_standard_venv", "Metóda: Štandardný systémový venv..."
                 )
                 self.progress_log.emit(msg_std)
@@ -151,7 +140,7 @@ class VenvCreatorWorker(QObject):
             # --- 2. DOINŠTALOVANIE NÁSTROJOV (SETUPTOOLS, WHEEL) ---
             pip_exe = os.path.join(self.venv_path, "Scripts", "pip.exe") if os.name == 'nt' else os.path.join(self.venv_path, "bin", "pip")
             if os.path.exists(pip_exe):
-                msg_tools = CoreBridge.translate(
+                msg_tools = LanguageBridge.translate(
                     "msg_create_install_tools", "4. Inštalujem základné nástroje (setuptools, wheel)..."
                 )
                 self.progress_log.emit(msg_tools)
@@ -163,13 +152,13 @@ class VenvCreatorWorker(QObject):
                 )
                 if tools_result.returncode != 0:
                     create_logger.write(f"UPOZORNENIE: setuptools/wheel sa nenainštalovali:\n{tools_result.stderr}")
-                    warn_tools = CoreBridge.translate(
+                    warn_tools = LanguageBridge.translate(
                         "msg_create_tools_failed", "Upozornenie: setuptools/wheel sa nepodarilo doinštalovať."
                     )
                     self.progress_log.emit(warn_tools)
 
             # --- 3. SNÍMKA SYSTÉMOVÝCH BALÍČKOV (Základ venvu pre APT) ---
-            msg_snap = CoreBridge.translate(
+            msg_snap = LanguageBridge.translate(
                 "msg_create_system_snapshot", "Zapisujem systémové balíčky prostredia pre ochranu APT..."
             )
             self.progress_log.emit(msg_snap)
@@ -180,7 +169,7 @@ class VenvCreatorWorker(QObject):
                 create_logger.write(f"UPOZORNENIE: snímku systémových balíčkov sa nepodarilo zapísať: {snap_err}")
 
             # --- 4. ZÁPIS RODNÉHO LISTU ---
-            msg_cert = CoreBridge.translate(
+            msg_cert = LanguageBridge.translate(
                 "msg_create_cert", "Zapisujem rodný list prostredia..."
             )
             self.progress_log.emit(msg_cert)
@@ -199,7 +188,7 @@ class VenvCreatorWorker(QObject):
             # --- 5. EVIDENCIA PRE OCHRANU PRENOSNOSTI (PORTABILITY GUARD) ---
             CoreBridge.register_venv_creation(self.venv_path, self.parent_py_path)
 
-            msg_ok = CoreBridge.translate(
+            msg_ok = LanguageBridge.translate(
                 "msg_create_ok", "Všetko v poriadku, prostredie je aktívne a pripravené."
             )
             self.progress_log.emit(msg_ok)
@@ -221,31 +210,23 @@ class VenvCreationBridge(QObject):
 class CreateVenvHandler:
     """
     Statický handler, ktorý zachytáva kliknutie na tlačidlo '+ VYTVORIŤ' v GUI.
-    Získava dáta o zvolenom Pythone cez mostík CoreBridge a spúšťa ProgressDialog.
+    Získava dáta o zvolenom Pythone cez mostík CoreBridge a spúšťa ProgressDialog cez DialogBridge.
     """
     _thread = None
     _worker = None
 
     @staticmethod
     def run(parent, core, py_list: list[dict]):
-        """
-        Zobrazí dialóg na zadanie mena, overí duplicitu a spustí tvorbu venvu.
-
-        Args:
-            parent: Rodičovské okno (ManagerWindow).
-            core: Inštancia ProjectCore.
-            py_list (list[dict]): Zoznam detegovaných Pythonov z CoreBridge.
-        """
         if not core.active_project:
-            CustomMessageBox.warning(
+            DialogBridge.warning(
                 parent,
-                CoreBridge.translate("title_error", "Chyba"),
-                CoreBridge.translate("err_select_project", "Najprv vyberte projekt."),
+                LanguageBridge.translate("title_error", "Chyba"),
+                LanguageBridge.translate("err_select_project", "Najprv vyberte projekt."),
             )
             return
 
-        title_input = CoreBridge.translate("title_new_venv", "Nové prostredie")
-        label_input = CoreBridge.translate("msg_venv_name_for", "Meno pre '{0}':").format(core.active_project)
+        title_input = LanguageBridge.translate("title_new_venv", "Nové prostredie")
+        label_input = LanguageBridge.translate("msg_venv_name_for", "Meno pre '{0}':").format(core.active_project)
         
         venv_name, ok = QInputDialog.getText(parent, title_input, label_input)
 
@@ -258,27 +239,25 @@ class CreateVenvHandler:
         full_path = Paths.get_venv_path(core.venv_hub_root, folder_name)
 
         if os.path.exists(full_path):
-            CustomMessageBox.warning(
+            DialogBridge.warning(
                 parent,
-                CoreBridge.translate("title_error", "Chyba"),
-                CoreBridge.translate("msg_venv_exists_simple", "Virtuálne prostredie s týmto názvom už existuje."),
+                LanguageBridge.translate("title_error", "Chyba"),
+                LanguageBridge.translate("msg_venv_exists_simple", "Virtuálne prostredie s týmto názvom už existuje."),
             )
             return
 
-        # Zistenie detailov o vybranom interpretéri z ComboBoxu
         selected_idx = parent.combo_py.currentIndex()
         if selected_idx < 0 or selected_idx >= len(py_list):
-            CustomMessageBox.warning(
+            DialogBridge.warning(
                 parent,
-                CoreBridge.translate("title_error", "Chyba"),
-                CoreBridge.translate("err_select_python", "Vyberte platný Python interpreter."),
+                LanguageBridge.translate("title_error", "Chyba"),
+                LanguageBridge.translate("err_select_python", "Vyberte platný Python interpreter."),
             )
             return
 
         selected_python_data = py_list[selected_idx]
         python_exe = selected_python_data["path"]
         
-        # Stavové vyhodnotenie cez kľúč origin / is_local
         is_local = selected_python_data.get("is_local", False) or "[Local]" in selected_python_data.get("display", "")
 
         parent_py_path = python_exe
@@ -290,8 +269,9 @@ class CreateVenvHandler:
             except ValueError:
                 pass
 
-        progress_dialog = ProgressDialog(parent)
-        dialog_msg = CoreBridge.translate("msg_creating_venv", "Vytváram venv: {0}...").format(safe_venv_name)
+        # Použitie čistého DialogBridge namiesto priameho importu ProgressDialogu
+        progress_dialog = DialogBridge.progress_dialog(parent)
+        dialog_msg = LanguageBridge.translate("msg_creating_venv", "Vytváram venv: {0}...").format(safe_venv_name)
         progress_dialog.set_message(dialog_msg)
 
         CreateVenvHandler._thread = QThread()
@@ -322,20 +302,20 @@ class CreateVenvHandler:
                 )
                 VSCodeIntegration.initialize_project_settings(project_path, full_path)
             except Exception as e:
-                CustomMessageBox.critical(
+                DialogBridge.critical(
                     parent,
-                    CoreBridge.translate("title_vscode_error", "Chyba VS Code"),
-                    CoreBridge.translate("msg_vscode_config_failed", "Zápis konfigurácie pre editor zlyhal:\n{0}").format(str(e)),
+                    LanguageBridge.translate("title_vscode_error", "Chyba VS Code"),
+                    LanguageBridge.translate("msg_vscode_config_failed", "Zápis konfigurácie pre editor zlyhal:\n{0}").format(str(e)),
                 )
 
             parent.refresh_table()
 
         def on_error(msg: str):
             progress_dialog.reject()
-            CustomMessageBox.critical(
+            DialogBridge.critical(
                 parent,
-                CoreBridge.translate("title_error", "Chyba"),
-                CoreBridge.translate("msg_create_failed_log_desktop", "Zlyhanie pri tvorbe prostredia:\n\n{0}").format(msg),
+                LanguageBridge.translate("title_error", "Chyba"),
+                LanguageBridge.translate("msg_create_failed_log_desktop", "Zlyhanie pri tvorbe prostredia:\n\n{0}").format(msg),
             )
 
         bridge = VenvCreationBridge(parent)

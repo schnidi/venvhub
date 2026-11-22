@@ -3,12 +3,12 @@
 #----------------------------------------
 
 import os
-from PyQt6.QtWidgets import QFileDialog, QMessageBox
-from core.logic.language_manager import LanguageManager
+from PyQt6.QtWidgets import QFileDialog
 from core._path import Paths
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- OBA MOSTY (JAZYK AJ DIALÓGY) - 0 TVRDÝCH VÄZIEB ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 
 class MetadataHandler:
@@ -30,7 +30,7 @@ class MetadataHandler:
         # Otvorí dialóg v koreni aktuálneho projektu
         selected_dir = QFileDialog.getExistingDirectory(
             window,
-            LanguageManager.get("dialog_select_metadata_folder", "Vyberte cieľový priečinok pre metadáta"),
+            LanguageBridge.translate("dialog_select_metadata_folder", "Vyberte cieľový priečinok pre metadáta"),
             project_root
         )
 
@@ -55,10 +55,13 @@ class MetadataHandler:
             window.edit_birth_cert_path.setText(final_path)
 
         except ValueError:
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(
                 window,
-                LanguageManager.get("title_outside_project_error", "Chyba - Mimo projektu!"),
-                LanguageManager.get("msg_folder_outside_project", "Vybraný priečinok sa nenachádza v aktuálnom projekte '{0}'.\n\nProsím, vyberte alebo vytvorte priečinok priamo v štruktúre projektu.").format(project_name)
+                LanguageBridge.translate("title_outside_project_error", "Chyba - Mimo projektu!"),
+                LanguageBridge.translate(
+                    "msg_folder_outside_project", 
+                    "Vybraný priečinok sa nenachádza v aktuálnom projekte '{0}'.\n\nProsím, vyberte alebo vytvorte priečinok priamo v štruktúre projektu."
+                ).format(project_name)
             )
             return

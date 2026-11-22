@@ -1,14 +1,16 @@
 #----------------------------------------
 # Súbor: core/logic/button/manager/py_launcher.py
+# Logika pre výber a správu spúšťacieho skriptu projektu.
+# Plne prepojené na DialogBridge a LanguageBridge (0 priamych väzieb na windows/).
 #----------------------------------------
 
 import os
 from PyQt6.QtWidgets import QFileDialog
 from core._path import Paths
-from core.logic.language_manager import LanguageManager
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 
 class ScriptLauncherHandler:
@@ -20,23 +22,25 @@ class ScriptLauncherHandler:
         """
         project_name = core.active_project
         if not project_name:
-            title = LanguageManager.get("title_error", "Chyba")
-            msg = LanguageManager.get("msg_no_project_selected", "Najprv vyberte projekt.")
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(parent_window, title, msg)
+            title = LanguageBridge.translate("title_error", "Chyba")
+            msg = LanguageBridge.translate("msg_no_project_selected", "Najprv vyberte projekt.")
+            
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(parent_window, title, msg)
             return
 
         project_path = Paths.get_project_path(core.projects_root, project_name)
         
         if not os.path.exists(project_path):
-            title = LanguageManager.get("title_error", "Chyba")
-            msg = LanguageManager.get("msg_project_not_found", "Priečinok projektu neexistuje.")
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(parent_window, title, msg)
+            title = LanguageBridge.translate("title_error", "Chyba")
+            msg = LanguageBridge.translate("msg_project_not_found", "Priečinok projektu neexistuje.")
+            
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(parent_window, title, msg)
             return
 
         # Preklady pre dialóg
-        dialog_title = LanguageManager.get("title_select_script", "Vybrať spúšťací skript")
+        dialog_title = LanguageBridge.translate("title_select_script", "Vybrať spúšťací skript")
         file_filter = "Python Scripts (*.py);;All Files (*.*)"
         
         # Otvorenie dialógu priamo v priečinku projektu
@@ -58,10 +62,14 @@ class ScriptLauncherHandler:
                 raise ValueError("Skript je mimo projektu")
                 
         except ValueError:
-            title_warn = LanguageManager.get("title_warning__selection_title", "Nedovolený výber")
-            msg_warn = LanguageManager.get("msg_script_outside", "Vybraný skript sa nenachádza v aktuálnom projekte '{0}'!\n\nVyberte súbor priamo z tohto priečinka.").format(project_name)
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(parent_window, title_warn, msg_warn)
+            title_warn = LanguageBridge.translate("title_warning__selection_title", "Nedovolený výber")
+            msg_warn = LanguageBridge.translate(
+                "msg_script_outside", 
+                "Vybraný skript sa nenachádza v aktuálnom projekte '{0}'!\n\nVyberte súbor priamo z tohto priečinka."
+            ).format(project_name)
+            
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(parent_window, title_warn, msg_warn)
             return
 
         # Nastavíme relatívnu cestu do textového poľa

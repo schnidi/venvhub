@@ -17,6 +17,7 @@ from core.core_states import (
     UVStatus
 )
 from core.logic.vscode_user.sluzby.ide_paths import IDEPaths
+from core.logic.sluzby.language_bridge import LanguageBridge
 
 
 class CoreBridge:
@@ -53,6 +54,7 @@ class CoreBridge:
             CoreService.PORTABILITY_GUARD,
             CoreService.PYTHON_DETECTOR,
             CoreService.UV_DETECTOR,
+            CoreService.REQUIREMENTS_SYNC,
         }
         
         for service_enum in CoreService:
@@ -106,55 +108,37 @@ class CoreBridge:
         }
 
     # =========================================================================
-    # SPOJOVATEĽ PRE JAZYK (Delegácia na registrovanú službu)
+    # SPOJOVATEĽ PRE JAZYK (Delegácia na samostatný LanguageBridge)
     # =========================================================================
     @classmethod
     def translate(cls, key: str, default: str = None) -> str:
-        """Preloží text podľa kľúča."""
-        lang_service = cls.get_service(CoreService.LANGUAGE)
-        if lang_service:
-            return lang_service.get(key, default)
-        return default if default else key
+        """Preloží text podľa kľúča cez LanguageBridge."""
+        return LanguageBridge.translate(key, default)
 
     @classmethod
     def load_language(cls, lang_code: str = "auto") -> LanguageStatus:
-        """Načíta jazykový súbor."""
-        lang_service = cls.get_service(CoreService.LANGUAGE)
-        if lang_service:
-            return lang_service.load_language(lang_code)
-        return LanguageStatus.ERROR
+        """Načíta jazykový súbor cez LanguageBridge."""
+        return LanguageBridge.load_language(lang_code)
 
     @classmethod
     def translate_window(cls, window: Any) -> None:
-        """Preloží prvky okna."""
-        lang_service = cls.get_service(CoreService.LANGUAGE)
-        if lang_service:
-            lang_service.translate_ui(window)
+        """Preloží prvky okna cez LanguageBridge."""
+        LanguageBridge.translate_window(window)
 
     @classmethod
     def get_current_language(cls) -> str:
-        """Vráti aktuálny kód jazyka (napr. sk_SK alebo en_US)."""
-        lang_service = cls.get_service(CoreService.LANGUAGE)
-        if lang_service and hasattr(lang_service, "_current_lang_code"):
-            return lang_service._current_lang_code
-        return "en_US"
+        """Vráti aktuálny kód jazyka cez LanguageBridge."""
+        return LanguageBridge.get_current_language()
 
     @classmethod
     def connect_language_changed(cls, slot) -> None:
-        """Pripne widget na odber real-time zmien jazyka."""
-        lang_service = cls.get_service(CoreService.LANGUAGE)
-        if lang_service:
-            lang_service.language_changed.connect(slot)
+        """Pripne widget na odber zmien jazyka cez LanguageBridge."""
+        LanguageBridge.connect_language_changed(slot)
 
     @classmethod
     def disconnect_language_changed(cls, slot) -> None:
-        """Odpojí widget z odberu zmien jazyka."""
-        lang_service = cls.get_service(CoreService.LANGUAGE)
-        if lang_service:
-            try:
-                lang_service.language_changed.disconnect(slot)
-            except (TypeError, RuntimeError):
-                pass
+        """Odpojí widget z odberu zmien jazyka cez LanguageBridge."""
+        LanguageBridge.disconnect_language_changed(slot)
 
     # =========================================================================
     # LAZY SLUŽBA PRE AKTUALIZÁCIU BALÍČKOV (PACKAGE_UPDATE)
@@ -372,3 +356,29 @@ class CoreBridge:
         """Mostík: vráti verziu UV."""
         state = cls.get_uv_state()
         return state["version"]
+
+    # =========================================================================
+    # LAZY SLUŽBA PRE REQUIREMENTS.TXT (REQUIREMENTS_SYNC)
+    # =========================================================================
+    @classmethod
+    def _get_requirements_service(cls):
+        """Lazy-loader pre synchronizáciu requirements.txt riadený cez CoreService Enum."""
+        service = cls.get_service(CoreService.REQUIREMENTS_SYNC)
+        if service is None:
+            from core.logic.sluzby.venv.pack_requr import RequirementsService
+            cls.register_service(CoreService.REQUIREMENTS_SYNC, RequirementsService)
+            service = RequirementsService
+        return service
+
+    @classmethod
+    def sync_requirements(cls, core, venv_path: str, project_root: str = "", req_file_path: str = None, log_callback=print, status_callback=None) -> bool:
+        """Oficiálny mostík jadra pre spustenie synchronizácie requirements.txt."""
+        service = cls._get_requirements_service()
+        return service.sync_requirements(
+            core=core,
+            venv_path=venv_path,
+            project_root=project_root,
+            req_file_path=req_file_path,
+            log_callback=log_callback,
+            status_callback=status_callback
+        )

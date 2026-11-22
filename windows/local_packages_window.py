@@ -116,7 +116,7 @@ class LocalPackagesWindow(QDialog):
                 with open(state_path, 'r', encoding='utf-8') as f:
                     linked_packages = set(json.load(f).keys())
             except Exception as e:
-                self.log(f"Chyba pri čítaní stavového súboru: {e}")
+                self.log(LanguageManager.get("local_pkg_err_read", "Chyba pri čítaní stavového súboru: {error}").format(error=str(e)))
 
         self.log(LanguageManager.get("local_pkg_log_loading", "\n🔄 Načítavam dostupné lokálne balíčky..."))
         loaded_count = 0
@@ -178,23 +178,52 @@ class LocalPackagesWindow(QDialog):
 
         self._set_ui_locked(True)
 
+        # Vytvoríme worker vlákno bez automatického zbrklého deleteLater
         self.linker_thread = LinkerWorker(self.core, self.venv_path, selected_items_data)
         self.linker_thread.log_signal.connect(self.log, Qt.ConnectionType.QueuedConnection)
         self.linker_thread.finished_signal.connect(self._on_apply_finished, Qt.ConnectionType.QueuedConnection)
-        
-        self.linker_thread.finished.connect(self.linker_thread.deleteLater)
         self.linker_thread.start()
 
     @pyqtSlot(LinkerOperationStatus, str)
     def _on_apply_finished(self, status: LinkerOperationStatus, error_msg: str):
-        self._set_ui_locked(False)
-        self.linker_thread = None
+        # 1. Bezpečne počkáme na dobehnutie C++ vlákna
+        if self.linker_thread:
+            self.linker_thread.wait(2000)
+            self.linker_thread = None
 
-        if status == LinkerOperationStatus.SUCCESS:
+        # 2. Odomkneme UI
+        self._set_ui_locked(False)
+
+        # 3. Vyhodnotenie výsledku
+        if status in (LinkerOperationStatus.SUCCESS, LinkerOperationStatus.NO_CHANGES):
             self.refresh_list()
+
         elif status == LinkerOperationStatus.MISSING_LOCAL_DEP:
-            CustomMessageBox.critical(self, LanguageManager.get("title_error", "Chyba"), error_msg)
+            # VRÁTIME CHECKBOXY DO PÔVODNÉHO STAVU
+            self.refresh_list()
+            title = CoreBridge.translate("title_error", "Chyba")
+            CustomMessageBox.critical(self, title, error_msg)
+
         elif status == LinkerOperationStatus.DEPENDENCY_ERROR:
-            CustomMessageBox.warning(self, LanguageManager.get("title_warning", "Upozornenie"), LanguageManager.get("msg_dep_install_err", "Inštalácia externých závislostí zlyhala.\nSkontrolujte log pre viac informácií."))
+            # KĽÚČOVÁ OPRAVA: Obnovíme zoznam z venvhub.json (zaškrtne sa naspäť!)
+            self.refresh_list()
+            
+            title = CoreBridge.translate("title_warning", "Upozornenie")
+            display_msg = error_msg if error_msg else CoreBridge.translate(
+                "msg_dep_install_err", 
+                "Inštalácia externých závislostí zlyhala.\nSkontrolujte log pre viac informácií."
+            )
+            CustomMessageBox.warning(self, title, display_msg)
+
         elif status == LinkerOperationStatus.ERROR:
-            CustomMessageBox.critical(self, LanguageManager.get("title_critical_error", "Kritická chyba"), error_msg)
+            # VRÁTIME CHECKBOXY DO PÔVODNÉHO STAVU
+            self.refresh_list()
+            title = CoreBridge.translate("title_critical_error", "Kritická chyba")
+            CustomMessageBox.critical(self, title, error_msg)
+
+    def closeEvent(self, event):
+        """Bezpečnostná poistka pri zatvorení okna s bežiacim workerom."""
+        if self.linker_thread and self.linker_thread.isRunning():
+            self.linker_thread.quit()
+            self.linker_thread.wait(1000)
+        super().closeEvent(event)

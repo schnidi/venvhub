@@ -81,10 +81,8 @@ class RequirementsParser:
                 return match.group(0) if match else None
 
             # B) Priorita 2 (Fallback heuristika pre čisté URL / Git bez #egg=):
-            # 1. Odstránenie fragmentov a parametrov (#..., ?...)
             clean_url = re.sub(r'[#?].*$', '', token).strip()
 
-            # 2. Odstránenie vetvy/tagu na konci (@main, @v1.0.0, @commit)
             if '@' in clean_url and not clean_url.startswith('git@') and not re.match(r'^[a-zA-Z0-9_+\-]+@[a-zA-Z0-9_.\-]+:', clean_url):
                 clean_url = clean_url.rsplit('@', 1)[0]
             elif clean_url.startswith('git@') or re.match(r'^[a-zA-Z0-9_+\-]+@[a-zA-Z0-9_.\-]+:', clean_url):
@@ -93,18 +91,13 @@ class RequirementsParser:
                     if '@' in path_part:
                         clean_url = f"{prefix}:{path_part.rsplit('@', 1)[0]}"
 
-            # 3. Získanie posledného segmentu cesty (názov súboru / repozitára)
             norm_path = clean_url.replace('\\', '/').rstrip('/')
             last_segment = norm_path.split('/')[-1] if '/' in norm_path else norm_path
 
-            # 4. Orezanie git prípony .git
             if last_segment.lower().endswith('.git'):
                 last_segment = last_segment[:-4]
 
-            # 5. Orezanie archívnych prípon (.tar.gz, .whl, .zip, atď.)
             last_segment = re.sub(r'\.(?:tar\.gz|tar\.bz2|tar\.xz|tgz|whl|zip|egg)$', '', last_segment, flags=re.IGNORECASE)
-
-            # 6. Orezanie čísla verzie na konci súboru (napr. emoji-2.2.0 -> emoji)
             last_segment = re.sub(r'-v?\d+(?:\.\d+)+(?:[-._]?[a-zA-Z0-9]+)*$', '', last_segment)
 
             match = re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9_.\-]*[A-Za-z0-9])?", last_segment)
@@ -157,14 +150,12 @@ class RequirementsParser:
         except Exception:
             return packages
 
-        # Nastavenie základného adresára z PÔVODNEJ ne-symlinkovanej cesty
         if base_dir is None:
             try:
                 base_dir = os.path.abspath(os.path.dirname(file_path))
             except Exception:
                 base_dir = os.path.dirname(abs_path)
 
-        # BEZPEČNOSTNÁ KONTROLA: Path Traversal & Symlink Check pre AKÝKOĽVEK spracovávaný súbor
         try:
             real_base_dir = os.path.normcase(os.path.realpath(base_dir))
             real_target_path = os.path.normcase(abs_path)
@@ -172,7 +163,6 @@ class RequirementsParser:
                 print(f"[RequirementsParser] Varovanie: Blokovaný pokus o Path Traversal / Symlink mimo povoleného adresára: '{file_path}'")
                 return packages
         except ValueError:
-            # Nastane na Windows pri prechode na iný disk (napr. C: -> D:) alebo odlišné UNC cesty
             print(f"[RequirementsParser] Varovanie: Blokovaný prístup na iný disk alebo neplatnú cestu: '{file_path}'")
             return packages
 
@@ -189,18 +179,12 @@ class RequirementsParser:
                 merged_lines = []
                 lines_buffer = []
                 
-                # Odstránenie komentárov a zlúčenie riadkov rozdelených pomocou '\'
                 for raw_line in f:
                     line_str = raw_line.rstrip('\r\n')
-                    
-                    # 1. Odstránenie in-line komentárov a orezanie
                     line_no_comment = re.sub(r'[\t ]+#.*', '', line_str).strip()
-                    
-                    # 2. Ignorovanie celoriadkových komentárov a prázdnych riadkov
                     if not line_no_comment or line_no_comment.startswith('#'):
                         continue
 
-                    # 3. Kontrola pokračovacieho znaku '\'
                     num_backslashes = len(line_no_comment) - len(line_no_comment.rstrip('\\'))
                     if num_backslashes % 2 == 1:
                         lines_buffer.append(line_no_comment[:-1])
@@ -215,7 +199,6 @@ class RequirementsParser:
                 for line in merged_lines:
                     line = line.strip()
 
-                    # Rekurzívne spracovanie '-r' / '--requirement'
                     req_match = re.match(r'^(?:-r[\s=]+|--requirement[\s=]+|-r(?=[./\\]))(.+)$', line)
                     if req_match:
                         raw_nested_path = req_match.group(1).lstrip("= \t")
@@ -237,33 +220,25 @@ class RequirementsParser:
                                 print(f"[RequirementsParser] Varovanie: Zlyhalo spracovanie '{nested_abs_path}': {e}")
                         continue
 
-                    # Spracovanie editable balíčkov (-e / --editable)
                     editable_match = re.match(r'^(?:-e\s+|--editable[\s=]+)(.+)$', line)
                     if editable_match:
                         raw_target = editable_match.group(1).strip().strip('\'"')
                         target_dir = None
 
-                        # Ak to NIE JE git/url odkaz (napr. -e git+https://...)
                         is_vcs = raw_target.startswith(RequirementsParser._URL_SCHEMES) or raw_target.startswith(('git@', 'http://', 'https://'))
                         
                         if not is_vcs:
-                            # 1. Kaskáda: Existuje cesta priamo na disku? (plná absolútna cesta napr. F:/.../pip1)
                             norm_raw = os.path.normpath(raw_target)
                             if os.path.isdir(norm_raw):
                                 target_dir = norm_raw
-                            
-                            # 2. Kaskáda: Existuje relatívne voči priečinku projektu / requirements.txt?
                             elif os.path.isdir(os.path.normpath(os.path.join(os.path.dirname(abs_path), raw_target))):
                                 target_dir = os.path.normpath(os.path.join(os.path.dirname(abs_path), raw_target))
-
-                            # 3. Kaskáda: Existuje priečinok v nastavenom pip_e_root?
                             elif pip_e_root:
                                 folder_name = os.path.basename(raw_target.rstrip('/\\'))
                                 candidate = os.path.normpath(os.path.join(pip_e_root, folder_name))
                                 if os.path.isdir(candidate):
                                     target_dir = candidate
 
-                            # Ak sme našli platný priečinok na disku, načítame skutočné meno zo setup.py / pyproject.toml
                             if target_dir and os.path.isdir(target_dir):
                                 pkg_name = RequirementsParser._get_package_name_from_dir(target_dir)
                                 if pkg_name:
@@ -272,7 +247,6 @@ class RequirementsParser:
                                         packages.add(normalized)
                                         continue
 
-                            # 4. Záloha (Fallback): Ak priečinok neexistuje, použijeme názov z konca cesty
                             fallback_name = os.path.basename(raw_target.rstrip('/\\'))
                             if fallback_name:
                                 clean_cand = RequirementsParser._extract_package_name(fallback_name)
@@ -284,11 +258,9 @@ class RequirementsParser:
 
                         line = raw_target
 
-                    # Ignorovanie ostatných direktív pip inštalátora (-f, -i, --extra-index-url atď.)
                     if line.startswith("-"):
                         continue
 
-                    # Extrakcia a normalizácia balíčka
                     raw_name = RequirementsParser._extract_package_name(line)
                     if raw_name:
                         normalized_name = RequirementsParser._normalize(raw_name)
@@ -300,16 +272,11 @@ class RequirementsParser:
 
         return packages
 
-    # =========================================================================
-    # --- NOVÉ METÓDY PRE APT: PLNÉ POŽIADAVKY A OVEROVANIE VERZIÍ ---
-    # =========================================================================
-
     @staticmethod
     def parse_requirements(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None) -> dict[str, str]:
         """
         Rekurzívne načíta requirements.txt a vráti požiadavky aj s verziami:
         { 'normalizovaný_názov': 'celý_riadok_požiadavky' }
-        Príklad výstupu: {'requests': 'requests==2.1', 'pytest': 'pytest>=8.0.0'}
         """
         if depth > 50:
             return {}
@@ -368,7 +335,6 @@ class RequirementsParser:
                 for line in merged_lines:
                     line = line.strip()
 
-                    # 1. Rekurzia cez -r / --requirement
                     req_match = re.match(r'^(?:-r[\s=]+|--requirement[\s=]+|-r(?=[./\\]))(.+)$', line)
                     if req_match:
                         raw_nested_path = req_match.group(1).lstrip("= \t")
@@ -385,7 +351,6 @@ class RequirementsParser:
                                 pass
                         continue
 
-                    # 2. Editable balíčky (-e / --editable)
                     editable_match = re.match(r'^(?:-e\s+|--editable[\s=]+)(.+)$', line)
                     if editable_match:
                         raw_target = editable_match.group(1).strip().strip('\'"')
@@ -421,7 +386,6 @@ class RequirementsParser:
                     if line.startswith("-"):
                         continue
 
-                    # 3. Štandardný riadok s balíčkom a verziou
                     raw_name = RequirementsParser._extract_package_name(line)
                     if raw_name:
                         norm_name = RequirementsParser._normalize(raw_name)
@@ -438,28 +402,19 @@ class RequirementsParser:
         """
         Vyhodnotí, či verzia nainštalovaná na disku spĺňa požiadavku z requirements.txt.
         Čistá logika bez závislosti na externých knižniciach.
-        
-        Príklad:
-            is_satisfied("requests==2.1", "2.0.0") -> False
-            is_satisfied("requests==2.1", "2.1.0") -> True
-            is_satisfied("requests", "2.0.0")      -> True (nebola zadaná verzia)
         """
         if not installed_version:
             return False
 
         req_clean = requirement.split(";")[0].strip()
 
-        # URL, git, lokálne cesty a -e balíčky považujeme za splnené, ak už na disku existujú
         if "@" in req_clean or "://" in req_clean or req_clean.startswith((".", "/", "\\", "git+", "-e")):
             return True
 
-        # Odstránenie [extras] napr. requests[socks] -> requests
         req_clean = re.sub(r"\[[^\]]*\]", "", req_clean)
 
-        # Vyhľadanie operátorov a verzií (napr. ==2.1, >=8.0, <9.0)
         operators_found = re.findall(r"([<>=!~]+)\s*([0-9A-Za-z_.\-]+)", req_clean)
         if not operators_found:
-            # V requirements nie je žiadne číslo (napr. len "requests") -> akákoľvek verzia stačí
             return True
 
         def _to_tuple(v_str):
@@ -470,7 +425,6 @@ class RequirementsParser:
 
         inst_tuple = _to_tuple(installed_version)
 
-        # Vyhodnotenie všetkých podmienok na riadku
         for op, target_ver in operators_found:
             target_tuple = _to_tuple(target_ver.rstrip(".*"))
 
@@ -502,21 +456,7 @@ class RequirementsParser:
     def parse_specs(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None) -> dict[str, str]:
         """
         Rekurzívne vyparsuje requirements.txt súbor a vráti mapu:
-        { normalizovaný_názov: plná_špecifikácia_balíčka (vrátane verzií ==, >=, <= alebo -e ciest) }.
-
-        Podporuje rekurzívne vnorené súbory (-r), editable balíčky (-e),
-        odstraňovanie komentárov, spájanie riadkov cez '\\' a bezpečnostné kontroly
-        proti cyklom a Path Traversal.
-
-        Args:
-            file_path (str): Cesta k requirements.txt súboru.
-            visited_files (set, voliteľné): Evidencia navštívených súborov proti zacykleniu.
-            depth (int, voliteľné): Aktuálna hĺbka rekurzie.
-            base_dir (str, voliteľné): Základný bezpečný adresár.
-            pip_e_root (str, voliteľné): Koreňový priečinok lokálnych pip -e balíčkov.
-
-        Returns:
-            dict[str, str]: Slovník v tvare {'normalizovaný_názov': 'plná_špecifikácia'}.
+        { normalizovaný_názov: plná_špecifikácia_balíčka }.
         """
         if depth > 50:
             print(f"[RequirementsParser] Varovanie: Prekročená max. hĺbka rekurzie (50) pri '{file_path}'.")
@@ -532,14 +472,12 @@ class RequirementsParser:
         except Exception:
             return specs
 
-        # Nastavenie základného adresára z PÔVODNEJ ne-symlinkovanej cesty
         if base_dir is None:
             try:
                 base_dir = os.path.abspath(os.path.dirname(file_path))
             except Exception:
                 base_dir = os.path.dirname(abs_path)
 
-        # BEZPEČNOSTNÁ KONTROLA: Path Traversal & Symlink Check pre AKÝKOĽVEK spracovávaný súbor
         try:
             real_base_dir = os.path.normcase(os.path.realpath(base_dir))
             real_target_path = os.path.normcase(abs_path)
@@ -547,7 +485,6 @@ class RequirementsParser:
                 print(f"[RequirementsParser] Varovanie: Blokovaný pokus o Path Traversal / Symlink mimo povoleného adresára: '{file_path}'")
                 return specs
         except ValueError:
-            # Nastane na Windows pri prechode na iný disk (napr. C: -> D:) alebo odlišné UNC cesty
             print(f"[RequirementsParser] Varovanie: Blokovaný prístup na iný disk alebo neplatnú cestu: '{file_path}'")
             return specs
 
@@ -564,18 +501,12 @@ class RequirementsParser:
                 merged_lines = []
                 lines_buffer = []
                 
-                # Odstránenie komentárov a zlúčenie riadkov rozdelených pomocou '\'
                 for raw_line in f:
                     line_str = raw_line.rstrip('\r\n')
-                    
-                    # 1. Odstránenie in-line komentárov a orezanie
                     line_no_comment = re.sub(r'[\t ]+#.*', '', line_str).strip()
-                    
-                    # 2. Ignorovanie celoriadkových komentárov a prázdnych riadkov
                     if not line_no_comment or line_no_comment.startswith('#'):
                         continue
 
-                    # 3. Kontrola pokračovacieho znaku '\'
                     num_backslashes = len(line_no_comment) - len(line_no_comment.rstrip('\\'))
                     if num_backslashes % 2 == 1:
                         lines_buffer.append(line_no_comment[:-1])
@@ -590,7 +521,6 @@ class RequirementsParser:
                 for line in merged_lines:
                     line = line.strip()
 
-                    # Rekurzívne spracovanie '-r' / '--requirement'
                     req_match = re.match(r'^(?:-r[\s=]+|--requirement[\s=]+|-r(?=[./\\]))(.+)$', line)
                     if req_match:
                         raw_nested_path = req_match.group(1).lstrip("= \t")
@@ -612,33 +542,25 @@ class RequirementsParser:
                                 print(f"[RequirementsParser] Varovanie: Zlyhalo spracovanie '{nested_abs_path}': {e}")
                         continue
 
-                    # Spracovanie editable balíčkov (-e / --editable)
                     editable_match = re.match(r'^(?:-e\s+|--editable[\s=]+)(.+)$', line)
                     if editable_match:
                         raw_target = editable_match.group(1).strip().strip('\'"')
                         target_dir = None
 
-                        # Ak to NIE JE git/url odkaz (napr. -e git+https://...)
                         is_vcs = raw_target.startswith(RequirementsParser._URL_SCHEMES) or raw_target.startswith(('git@', 'http://', 'https://'))
                         
                         if not is_vcs:
-                            # 1. Kaskáda: Existuje cesta priamo na disku? (plná absolútna cesta napr. F:/.../pip1)
                             norm_raw = os.path.normpath(raw_target)
                             if os.path.isdir(norm_raw):
                                 target_dir = norm_raw
-                            
-                            # 2. Kaskáda: Existuje relatívne voči priečinku projektu / requirements.txt?
                             elif os.path.isdir(os.path.normpath(os.path.join(os.path.dirname(abs_path), raw_target))):
                                 target_dir = os.path.normpath(os.path.join(os.path.dirname(abs_path), raw_target))
-
-                            # 3. Kaskáda: Existuje priečinok v nastavenom pip_e_root?
                             elif pip_e_root:
                                 folder_name = os.path.basename(raw_target.rstrip('/\\'))
                                 candidate = os.path.normpath(os.path.join(pip_e_root, folder_name))
                                 if os.path.isdir(candidate):
                                     target_dir = candidate
 
-                            # Ak sme našli platný priečinok na disku, načítame skutočné meno zo setup.py / pyproject.toml
                             if target_dir and os.path.isdir(target_dir):
                                 pkg_name = RequirementsParser._get_package_name_from_dir(target_dir)
                                 if pkg_name:
@@ -648,7 +570,6 @@ class RequirementsParser:
                                         specs[normalized] = f"-e {safe_path}"
                                         continue
 
-                            # 4. Záloha (Fallback): Ak priečinok neexistuje, použijeme názov z konca cesty
                             fallback_name = os.path.basename(raw_target.rstrip('/\\'))
                             if fallback_name:
                                 clean_cand = RequirementsParser._extract_package_name(fallback_name)
@@ -660,11 +581,9 @@ class RequirementsParser:
 
                         line = raw_target
 
-                    # Ignorovanie ostatných direktív pip inštalátora (-f, -i, --extra-index-url atď.)
                     if line.startswith("-"):
                         continue
 
-                    # Extrakcia a normalizácia balíčka
                     raw_name = RequirementsParser._extract_package_name(line)
                     if raw_name:
                         normalized_name = RequirementsParser._normalize(raw_name)
@@ -675,3 +594,121 @@ class RequirementsParser:
             print(f"[RequirementsParser] Chyba pri čítaní '{abs_path}': {e}")
 
         return specs
+
+    # =========================================================================
+    # --- APT ROBUSTNÉ ROZŠÍRENIA ---
+    # =========================================================================
+
+    @staticmethod
+    def extract_extras(token: str) -> list[str]:
+        """Bezpečne vytiahne extras z reťazca (napr. 'requests[socks,ssl]>=2.0' -> ['socks', 'ssl'])."""
+        if not token:
+            return []
+        clean = token.split(';')[0].strip()
+        match = re.search(r'\[([^\]]+)\]', clean)
+        if match:
+            return [RequirementsParser._normalize(e) for e in match.group(1).split(',') if e.strip()]
+        return []
+
+    @staticmethod
+    def _extract_bracket_list(content: str, keyword: str) -> list[str]:
+        """Nájde keyword = [...] a zvládne vnorené hranaté zátvorky ako 'requests[socks]'."""
+        match = re.search(rf'{keyword}\s*=\s*\[', content)
+        if not match:
+            return []
+        start = match.end()
+        level = 1
+        pos = start
+        while pos < len(content) and level > 0:
+            ch = content[pos]
+            if ch == '[':
+                level += 1
+            elif ch == ']':
+                level -= 1
+            pos += 1
+        if level != 0:
+            return []
+        block = content[start:pos - 1]
+        raw_items = re.findall(r'["\']([^"\']+)["\']', block)
+        return [it.strip() for it in raw_items if it.strip()]
+
+    @staticmethod
+    def get_project_dependencies(project_path: str) -> list[str]:
+        """
+        Robustne načíta závislosti lokálneho projektu (pyproject.toml, requirements.txt, setup.cfg, setup.py).
+        Nikdy nezlyhá na vnorených [extras] zátvorkách!
+        """
+        if not project_path or not os.path.isdir(project_path):
+            return []
+
+        # 1. Priorita: pyproject.toml (PEP 621)
+        pyproject_file = os.path.join(project_path, "pyproject.toml")
+        if os.path.isfile(pyproject_file):
+            try:
+                with open(pyproject_file, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                    deps = RequirementsParser._extract_bracket_list(content, "dependencies")
+                    if deps:
+                        return deps
+            except Exception:
+                pass
+
+        # 2. Priorita: requirements.txt v priečinku balíčka (ak existuje)
+        inner_req = os.path.join(project_path, "requirements.txt")
+        if os.path.isfile(inner_req):
+            try:
+                reqs_map = RequirementsParser.parse_requirements(inner_req)
+                if reqs_map:
+                    return list(reqs_map.values())
+            except Exception:
+                pass
+
+        # 3. Priorita: setup.cfg
+        setup_cfg = os.path.join(project_path, "setup.cfg")
+        if os.path.isfile(setup_cfg):
+            try:
+                with open(setup_cfg, "r", encoding="utf-8", errors="replace") as f:
+                    in_reqs = False
+                    deps = []
+                    for line in f:
+                        if line.strip().startswith("install_requires"):
+                            in_reqs = True
+                            continue
+                        if in_reqs:
+                            if line.startswith((" ", "\t")):
+                                val = line.strip()
+                                if val:
+                                    deps.append(val)
+                            else:
+                                break
+                    if deps:
+                        return deps
+            except Exception:
+                pass
+
+        # 4. Priorita: setup.py
+        setup_py = os.path.join(project_path, "setup.py")
+        if os.path.isfile(setup_py):
+            try:
+                with open(setup_py, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                    deps = RequirementsParser._extract_bracket_list(content, "install_requires")
+                    if deps:
+                        return deps
+            except Exception:
+                pass
+
+        return []
+
+    @staticmethod
+    def parse_extras_map(file_path: str, pip_e_root: str = None) -> dict[str, list[str]]:
+        """Vráti mapu {rodič: [extra1, extra2]} využitím existujúceho parsera."""
+        extras_map = {}
+        if not file_path or not os.path.isfile(file_path):
+            return extras_map
+        reqs = RequirementsParser.parse_requirements(file_path, pip_e_root=pip_e_root)
+        for norm_name, full_spec in reqs.items():
+            exts = RequirementsParser.extract_extras(full_spec)
+            if exts:
+                extras_map[norm_name] = exts
+        return extras_map

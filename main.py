@@ -80,19 +80,28 @@ def main():
     app = QApplication(sys.argv)
 
     # =========================================================================
-    # 3. REGISTRÁCIA GUI SLUŽIEB & PREKLADY JADRA
+    # 3. REGISTRÁCIA DIALÓGOVÉHO MOSTA (Okamžite pri štarte GUI)
+    # =========================================================================
+    # Musí byť hneď po vzniku QApplication, aby mohlo vyskočiť okno pri akejkoľvek chybe
+    from core.logic.sluzby.dialog_bridge import DialogBridge
+    from windows.custom_message_box import CustomMessageBox
+    from windows.progress_dialog import ProgressDialog
+    DialogBridge.register_provider(CustomMessageBox, ProgressDialog)
+
+    # =========================================================================
+    # 4. REGISTRÁCIA PREKLADOV & AUDIT SLUŽIEB
     # =========================================================================
     from core.logic.sluzby.language.language_manager import LanguageManager
+    from core.logic.sluzby.language_bridge import LanguageBridge
     
     lang_manager = LanguageManager()
+    LanguageBridge.register_provider(lang_manager)
     CoreBridge.register_service(CoreService.LANGUAGE, lang_manager)
     
-    # === TU JE SPRÁVNE MIESTO PRE AUDIT ===
-    # Prebehne kontrola zoznamu služieb a vypíše sa do konzoly
+    # Prebehne audit zoznamu služieb do konzoly
     CoreBridge.audit_services()
-    # ======================================
     
-    # Načítame preklady úplne na začiatku, pred tvorbou okien
+    # Načítame jazyk pred zobrazením okien
     CoreBridge.load_language("auto")
     # =========================================================================
 
@@ -118,7 +127,8 @@ def main():
         if checker.is_running():
             sys.exit(0)
     except SingleInstanceError as e:
-        print(f"CHYBA: {e}")
+        # Tu už bezpečne funguje DialogBridge, ak by nastala chyba inštancie
+        DialogBridge.critical(None, "VenvHub Pro", f"Chyba inštancie: {e}")
         sys.exit(1)
 
     app._single_instance = checker

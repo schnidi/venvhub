@@ -1,12 +1,14 @@
 #----------------------------------------
 # Súbor: core/logic/containers/button/add_new_group.py
+# Logika pre tlačidlo 'Pridať novú skupinu' v záložke Container.
+# Plne prepojené na DialogBridge a LanguageBridge (0 priamych väzieb na windows/).
 #----------------------------------------
 
 from PyQt6.QtWidgets import QInputDialog
-from core.logic.language_manager import LanguageManager
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 class AddNewGroupHandler:
     """
@@ -35,19 +37,19 @@ class AddNewGroupHandler:
 
         # 4. Ak už nie je čo pridať, zobrazíme správu
         if not selectable_groups:
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.information(
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.information(
                 autostart_window,
-                LanguageManager.get("add_group_msg_title", "Všetko pridané"),
-                LanguageManager.get("add_group_msg_text", "Všetky dostupné skupiny z 'Hromadného spúšťania' sú už v zozname.")
+                LanguageBridge.translate("add_group_msg_title", "Všetko pridané"),
+                LanguageBridge.translate("add_group_msg_text", "Všetky dostupné skupiny z 'Hromadného spúšťania' sú už v zozname.")
             )
             return
 
         # 5. Zobrazíme dialóg s výberom dostupných skupín
         group_name, ok = QInputDialog.getItem(
             autostart_window,
-            LanguageManager.get("add_group_dialog_title", "Vybrať skupinu"),
-            LanguageManager.get("add_group_dialog_text", "Vyberte skupinu, ktorú chcete pridať do monitoringu:"),
+            LanguageBridge.translate("add_group_dialog_title", "Vybrať skupinu"),
+            LanguageBridge.translate("add_group_dialog_text", "Vyberte skupinu, ktorú chcete pridať do monitoringu:"),
             selectable_groups,
             0,
             False

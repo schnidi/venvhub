@@ -1,19 +1,15 @@
 #-------------------------------------------------------------------------------
 # Súbor: core/logic/commands/uv_commands.py
 # Príkazový dispečer pre balíčkovací manažér UV (Astral).
-# Cestu k binárke UV získava výhradne cez mostík jadra CoreBridge.
+# ZÁVISLOSTI: 0 na CoreBridge (používa LanguageBridge a priamu detekciu cesty)
 #-------------------------------------------------------------------------------
-
-"""
-Modul UvCommandDispatcher generuje zoznamy CLI argumentov pre nástroj 'uv pip'.
-Zabezpečuje plnú kompatibilitu s príkazmi pipu pri zachovaní extrémnej rýchlosti UV.
-"""
 
 from typing import Callable, Any
 import os
+import shutil
 
 from core._path import Paths
-from core.core_bridge import CoreBridge
+from core.logic.sluzby.language_bridge import LanguageBridge
 
 
 class UvCommandDispatcher:
@@ -23,23 +19,21 @@ class UvCommandDispatcher:
     """
 
     def __init__(self, venv_path: str):
-        """
-        Inicializuje dispečera a overí existenciu python.exe v danom prostredí.
-
-        Args:
-            venv_path (str): Cesta k virtuálnemu prostrediu.
-        """
         python_exe_path = Paths.get_venv_python_exe_path(venv_path)
         if not venv_path or not os.path.exists(python_exe_path):
-            err_msg = CoreBridge.translate(
+            err_msg = LanguageBridge.translate(
                 "uv_cmd_err_no_python", "Cesta k python.exe neexistuje: {path}"
             ).format(path=python_exe_path)
             raise ValueError(err_msg)
             
         self.python_exe = python_exe_path
         
-        # Cestu k UV získavame výhradne cez mostík jadra
-        uv_exe = CoreBridge.get_uv_path() or "uv"
+        # Zistenie cesty k uv (najprv vo vnútri venvu, potom v systéme PATH)
+        uv_candidate = os.path.join(venv_path, Paths.VENV_SCRIPTS_DIR_NAME, "uv.exe" if os.name == 'nt' else "uv")
+        if os.path.exists(uv_candidate):
+            uv_exe = os.path.normpath(uv_candidate)
+        else:
+            uv_exe = shutil.which("uv.exe" if os.name == 'nt' else "uv") or "uv"
         
         self.uv_base = [uv_exe, "pip"]
         self.python_arg = ["--python", self.python_exe]
@@ -98,7 +92,7 @@ class UvCommandDispatcher:
                 self.uv_base + ["show"] + [kwargs['package_name']] + self.python_arg,
 
             "search": lambda **kwargs: 
-                ["echo", CoreBridge.translate("uv_cmd_no_search", "UV nepodporuje 'search'.")],
+                ["echo", LanguageBridge.translate("uv_cmd_no_search", "UV nepodporuje 'search'.")],
             
             "check": lambda **kwargs: 
                 self.uv_base + ["check"] + self.python_arg,
@@ -111,9 +105,8 @@ class UvCommandDispatcher:
         }
 
     def get(self, command_key: str, **kwargs: Any) -> list[str]:
-        """Vráti hotový zoznam CLI argumentov podľa požadovaného kľúča."""
         if command_key not in self._commands:
-            err_msg = CoreBridge.translate(
+            err_msg = LanguageBridge.translate(
                 "uv_cmd_err_invalid", "Príkaz '{cmd}' neexistuje."
             ).format(cmd=command_key)
             raise KeyError(err_msg)

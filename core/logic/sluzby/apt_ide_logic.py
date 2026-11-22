@@ -10,7 +10,7 @@ import subprocess
 
 from core._path import Paths
 from core.core_states import IDEType
-from core.core_bridge import CoreBridge
+from core.logic.vscode_user.sluzby.ide_paths import IDEPaths
 from core.logic.language_manager import LanguageManager
 from core.logic.commands.vscode_commands import VSCodeCommandDispatcher
 from core.logic.commands.cursor_commands import CursorAICommandDispatcher
@@ -41,24 +41,16 @@ class AptIDELogic:
     @staticmethod
     def _get_ide_context(core) -> dict:
         """
-        Zistí aktívne IDE, profil, cesty a dispečer priamo cez stavovú službu CoreBridge.
+        Zistí aktívne IDE, profil, cesty a dispečer priamo cez nízkoúrovňový IDEPaths.
         """
         active_ide = getattr(core, 'active_ide', 'vscode')
         portable_path = getattr(core, f"portable_{active_ide}_path", "")
         users_root = getattr(core, 'vscode_users_root', '')
         active_user = core.get_active_ide_user() if hasattr(core, 'get_active_ide_user') else ''
 
-        # Získanie overeného stavu z mosta jadra
-        ide_state = CoreBridge.get_ide_state(
-            ide_type=active_ide,
-            portable_path=portable_path,
-            users_root=users_root,
-            active_user_id=active_user
-        )
-
-        executable = ide_state["executable"]
-        extensions_dir = ide_state["extensions_dir"]
-        user_data_dir = ide_state["user_data_dir"]
+        # Získanie ciest priamo cez IDEPaths bez cyklu cez CoreBridge
+        raw_status, executable = IDEPaths.get_raw_executable_info(active_ide, portable_path)
+        raw_mode, user_data_dir, extensions_dir = IDEPaths.get_raw_profile_paths(users_root, active_user, active_ide)
 
         # Zaistenie priečinkov a cesty k účtenke
         if extensions_dir:
@@ -70,7 +62,7 @@ class AptIDELogic:
             tracker_file = ""
 
         # Vytvorenie príkazového dispečera s overenou binárkou
-        if ide_state["ide_type"] == IDEType.CURSOR:
+        if active_ide == "cursor":
             dispatcher = CursorAICommandDispatcher(custom_executable=executable)
             ide_name = "Cursor"
         else:

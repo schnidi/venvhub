@@ -1,15 +1,17 @@
 #----------------------------------------
 # Súbor: core/logic/button/widget/widget_dispatcher.py
+# Logika pre spracovanie hlavných tlačidiel na mini-bare.
+# Plne prepojené na DialogBridge a LanguageBridge (0 priamych väzieb na windows/).
 #----------------------------------------
 
 import os
-from core.logic.language_manager import LanguageManager
+from core._path import Paths
 from core.logic.button.manager.actions import ActionHandler
 from core.logic.containers.logic.check_multi_venv import MultiVenvChecker
-from core._path import Paths
 
-# --- PRIDANÝ IMPORT NAŠHO BEZRÁMOVÉHO OKNA ---
-from windows.custom_message_box import CustomMessageBox
+# --- ČISTÉ MOSTY (0 VÄZIEB NA WINDOWS) ---
+from core.logic.sluzby.language_bridge import LanguageBridge
+from core.logic.sluzby.dialog_bridge import DialogBridge
 
 # --- IMPORT PRE VS CODE ---
 from core.logic.vscode_user.start_vs_code_user import VSCodeLauncher
@@ -28,11 +30,11 @@ class WidgetDispatcher:
         core = parent_widget.core
         
         if core.app_mode == 'multi':
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.information(
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.information(
                 parent_widget, 
-                LanguageManager.get("title_info", "Info"), 
-                LanguageManager.get("msg_vscode_single_only", "Otváranie VS Code je dostupné len v režime Single.")
+                LanguageBridge.translate("title_info", "Info"), 
+                LanguageBridge.translate("msg_vscode_single_only", "Otváranie VS Code je dostupné len v režime Single.")
             )
             return
             
@@ -40,25 +42,26 @@ class WidgetDispatcher:
         error_messages = []
         
         if not core.active_project:
-            msg = LanguageManager.get("err_no_project_selected_widget", "• Nebol vybraný žiadny projekt.")
+            msg = LanguageBridge.translate("err_no_project_selected_widget", "• Nebol vybraný žiadny projekt.")
             error_messages.append(msg)
             
         if not core.active_venv_path:
-            msg = LanguageManager.get("err_no_default_venv_set", "• Pre projekt nie je nastavené predvolené prostredie (venv).")
+            msg = LanguageBridge.translate("err_no_default_venv_set", "• Pre projekt nie je nastavené predvolené prostredie (venv).")
             error_messages.append(msg)
         elif not os.path.exists(core.active_venv_path):
-            msg = LanguageManager.get(
+            msg = LanguageBridge.translate(
                 "err_venv_not_found_widget",
                 "• Prostredie (venv) sa na disku nenašlo: {0}"
             ).format(core.active_venv_path)
             error_messages.append(msg)
 
         if error_messages:
-            title = LanguageManager.get("err_cannot_start_title", "Nie je možné spustiť")
-            intro = LanguageManager.get("err_intro_problems_found", "Vyskytli sa nasledujúce problémy:")
+            title = LanguageBridge.translate("err_cannot_start_title", "Nie je možné spustiť")
+            intro = LanguageBridge.translate("err_intro_problems_found", "Vyskytli sa nasledujúce problémy:")
             full_message = f"{intro}\n\n" + "\n".join(error_messages)
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(parent_widget, title, full_message)
+            
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(parent_widget, title, full_message)
             return
 
         # Všetko je OK, spúšťame existujúcu logiku VS Code
@@ -66,10 +69,10 @@ class WidgetDispatcher:
         success, err_msg = VSCodeLauncher.launch(core, project_path, core.active_venv_path)
         
         if not success:
-            # --- ZMENA NA NAŠU LIŠTU ---
-            CustomMessageBox.warning(
+            # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+            DialogBridge.warning(
                 parent_widget, 
-                LanguageManager.get("title_vscode_launch_error", "Chyba pri spúšťaní VS Code"), 
+                LanguageBridge.translate("title_vscode_launch_error", "Chyba pri spúšťaní VS Code"), 
                 err_msg
             )
 
@@ -88,15 +91,16 @@ class WidgetDispatcher:
 
             conflicts = MultiVenvChecker.get_running_conflicts(core, active_group)
             if conflicts:
-                msg_template = LanguageManager.get(
+                msg_template = LanguageBridge.translate(
                     "msg_cannot_start_group_conflicts",
                     "Nie je možné spustiť skupinu '{0}', pretože nasledujúce prostredia už bežia:\n\n{1}\n\nNajprv ich zastavte."
                 )
                 msg = msg_template.format(active_group, "\n".join(f"- {c}" for c in conflicts))
-                # --- ZMENA NA NAŠU LIŠTU ---
-                CustomMessageBox.warning(
+                
+                # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+                DialogBridge.warning(
                     parent_widget, 
-                    LanguageManager.get("title_venv_conflict", "Konflikt prostredí"), 
+                    LanguageBridge.translate("title_venv_conflict", "Konflikt prostredí"), 
                     msg
                 )
                 return
@@ -109,36 +113,37 @@ class WidgetDispatcher:
             error_messages = []
             
             if not core.active_project:
-                msg = LanguageManager.get("err_no_project_selected_widget", "• Nebol vybraný žiadny projekt.")
+                msg = LanguageBridge.translate("err_no_project_selected_widget", "• Nebol vybraný žiadny projekt.")
                 error_messages.append(msg)
             
             if not core.active_venv_path:
-                msg = LanguageManager.get("err_no_default_venv_set", "• Pre projekt nie je nastavené predvolené prostredie (venv).")
+                msg = LanguageBridge.translate("err_no_default_venv_set", "• Pre projekt nie je nastavené predvolené prostredie (venv).")
                 error_messages.append(msg)
             elif not os.path.exists(core.active_venv_path):
-                msg = LanguageManager.get(
+                msg = LanguageBridge.translate(
                     "err_venv_not_found_widget",
                     "• Prostredie (venv) sa na disku nenašlo: {0}"
                 ).format(core.active_venv_path)
                 error_messages.append(msg)
 
             if not core.last_script:
-                msg = LanguageManager.get("err_no_script_defined_widget", "• Nie je definovaný spúšťací skript.")
+                msg = LanguageBridge.translate("err_no_script_defined_widget", "• Nie je definovaný spúšťací skript.")
                 error_messages.append(msg)
             elif core.active_project and core.last_script:
                 project_path = Paths.get_project_path(core.projects_root, core.active_project)
                 script_full_path = os.path.join(project_path, core.last_script)
                 
                 if not os.path.exists(script_full_path):
-                    msg_format = LanguageManager.get("err_script_not_found_widget", "• Spúšťací skript '{0}' sa v projekte nenašiel.")
+                    msg_format = LanguageBridge.translate("err_script_not_found_widget", "• Spúšťací skript '{0}' sa v projekte nenašiel.")
                     error_messages.append(msg_format.format(core.last_script))
 
             if error_messages:
-                title = LanguageManager.get("err_cannot_start_title", "Nie je možné spustiť")
-                intro = LanguageManager.get("err_intro_problems_found", "Vyskytli sa nasledujúce problémy:")
+                title = LanguageBridge.translate("err_cannot_start_title", "Nie je možné spustiť")
+                intro = LanguageBridge.translate("err_intro_problems_found", "Vyskytli sa nasledujúce problémy:")
                 full_message = f"{intro}\n\n" + "\n".join(error_messages)
-                # --- ZMENA NA NAŠU LIŠTU ---
-                CustomMessageBox.warning(parent_widget, title, full_message)
+                
+                # --- ZOBRAZENIE CEZ DIALOG BRIDGE ---
+                DialogBridge.warning(parent_widget, title, full_message)
                 return
 
             if core.run_mode == "run_in_terminal":
