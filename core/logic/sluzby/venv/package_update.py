@@ -49,6 +49,22 @@ class PackageUpdateService:
                 ))
             return False
 
+        # ==========================================================
+        # KROK 0: STRIKTNÁ KONTROLA INTEGRITY JSONU (100% zhoda kľúčov)
+        # ==========================================================
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as e:
+            err_msg = str(e)
+            log_callback(err_msg)
+            if status_callback:
+                status_callback(AptStatusEvent(
+                    state=AptState.FAILED,
+                    message=err_msg,
+                    data={"reason": "corrupt_state"}
+                ))
+            return False
+
         CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
         dispatcher = PackageManagerFactory.get_dispatcher(manager_type, venv_path)
 

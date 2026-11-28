@@ -13,7 +13,7 @@ from typing import Callable, Optional
 from core._path import Paths
 from core.core_states import EditableOperationStatus
 from core.logic.sluzby.language_bridge import LanguageBridge
-from core.logic.sluzby.venv.pack_operation_state import AptState, AptStatusEvent
+from core.logic.sluzby.apt_state import AptState, AptStatusEvent
 from core.logic.commands.command_factory import PackageManagerFactory
 from core.logic.sluzby.apt_logic import AptLogic
 from core.logic.sluzby.requirements_parser import RequirementsParser
@@ -236,6 +236,19 @@ class EditableOperationsService:
                 except Exception:
                     pass
 
+        # 0. KONTROLA INTEGRITY STAVU (100% ZHODA KĽÚČOV V JSON)
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as e:
+            err_msg = str(e)
+            log_callback(err_msg)
+            _unified_status(AptStatusEvent(
+                state=AptState.FAILED,
+                message=err_msg,
+                data={"reason": "corrupt_state"}
+            ))
+            return EditableOperationStatus.ERROR
+
         target_norm = os.path.normpath(target_path)
         has_setup = os.path.exists(os.path.join(target_norm, "setup.py"))
         has_toml = os.path.exists(os.path.join(target_norm, "pyproject.toml"))
@@ -424,12 +437,15 @@ class EditableOperationsService:
             raw_project_deps = RequirementsParser.get_project_dependencies(target_norm)
             deps = []
             extras_bound_map = {}
+            
+            # Správne volanie systémových balíčkov z AptLogic:
+            system_pkgs = AptLogic.ensure_system_packages(venv_path)
 
             for raw_dep in raw_project_deps:
                 clean_name = RequirementsParser._extract_package_name(raw_dep)
                 if clean_name:
                     norm_dep = AptLogic._normalize(clean_name)
-                    if norm_dep not in AptLogic.CORE_TOOLS and norm_dep != norm_name:
+                    if norm_dep not in system_pkgs and norm_dep != norm_name:
                         deps.append(norm_dep)
 
                     req_exts = RequirementsParser.extract_extras(raw_dep)
@@ -515,6 +531,19 @@ class EditableOperationsService:
         norm_name = AptLogic._normalize(package_name)
         log_callback("\n" + "="*55)
         log_callback(LanguageBridge.translate("edit_uninstall_start", "🗑️ [EditableService] Spúšťam previerku odinštalovania balíčka: '{0}'...").format(norm_name))
+
+        # 0. KONTROLA INTEGRITY STAVU (100% ZHODA KĽÚČOV V JSON)
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as e:
+            err_msg = str(e)
+            log_callback(err_msg)
+            _unified_status(AptStatusEvent(
+                state=AptState.FAILED,
+                message=err_msg,
+                data={"reason": "corrupt_state"}
+            ))
+            return EditableOperationStatus.ERROR
 
         # 1. APT BEZPEČNOSTNÁ PREVIERKA (GUARD)
         is_safe, err_msg = AptLogic.verify_uninstall_safety(venv_path, core, norm_name, status_callback=_unified_status)

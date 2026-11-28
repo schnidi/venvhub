@@ -81,33 +81,54 @@ class PackageOperationsService:
                 log_callback(f"   ├─ {t_pkg}")
                 log_callback(f"   └─ {t_info}")
 
-            # 4. BEZPEČNOSTNÁ STOPKA (Presný rozbor prečo nemožno odinštalovať)
+            # 4. BEZPEČNOSTNÁ STOPKA (Presný rozbor prečo nemožno odinštalovať – spracováva VŠETKY zistené dôvody)
             elif event.state == AptState.FAILED and event.get("can_uninstall") is False:
-                reason = event.get("block_reason", "UNKNOWN")
                 pkg = event.get("target_package", "?")
+                reasons = event.get("block_reasons_list", [])
+                if not reasons:
+                    # Spätná kompatibilita v prípade, že by boli dáta odovzdané priamo na najvyššej úrovni
+                    reasons = [event.data]
 
                 t_title = LanguageBridge.translate("pack_tree_safety_guard", "🛑 [DETAIL BEZPEČNOSTNEJ OCHRANY]")
                 t_pkg = LanguageBridge.translate("pack_tree_target_pkg", "Cieľový balíček: {0}").format(pkg)
-                t_reason = LanguageBridge.translate("pack_tree_block_reason", "Dôvod zablokovania: {0}").format(reason)
+
+                items_to_log = [t_pkg]
+
+                for idx, r in enumerate(reasons, 1):
+                    r_code = r.get("block_reason", event.get("block_reason", "UNKNOWN"))
+                    t_reason = LanguageBridge.translate("pack_tree_block_reason", "Dôvod zablokovania: {0}").format(r_code)
+
+                    if "broken_dependents" in r:
+                        dep_str = ", ".join(r.get("broken_dependents", []))
+                        detail = LanguageBridge.translate("pack_tree_broken_deps", "Balíček vyžadujú tieto komponenty: {0}").format(dep_str)
+                    elif "required_by_linker_modules" in r:
+                        mod_str = ", ".join(r.get("required_by_linker_modules", []))
+                        detail = LanguageBridge.translate("pack_tree_linker_required", "Vyžadované Linker modulmi: {0}").format(mod_str)
+                    elif "required_by_editable" in r:
+                        ed_str = ", ".join(r.get("required_by_editable", []))
+                        detail = LanguageBridge.translate("pack_tree_editable_required", "Vyžadované editovateľným projektom (pip -e): {0}").format(ed_str)
+                    elif r_code == "EXPLICIT_EXTRA_BOUND":
+                        detail = LanguageBridge.translate("pack_tree_explicit_bound_parent", "Balíček je naviazaný cez extra na manuálny balíček: {0}").format(r.get("bound_parent"))
+                    elif "bound_parent" in r:
+                        detail = LanguageBridge.translate("pack_tree_extra_bound_parent", "Balíček je naviazaný cez extra na požiadavku: {0}").format(r.get("bound_parent"))
+                    elif "defined_in_file" in r:
+                        detail = LanguageBridge.translate("pack_tree_locked_in_reqs", "Natvrdo zapísaný v: {0}").format(r.get("defined_in_file"))
+                    elif r_code == "SYSTEM_PACKAGE":
+                        detail = LanguageBridge.translate("pack_tree_system_pkg_protected", "Systémový balíček prostredia (súčasť základu venvu).")
+                    else:
+                        detail = LanguageBridge.translate("pack_tree_core_protected", "Chránené jadrom systému.")
+
+                    if len(reasons) > 1:
+                        items_to_log.append(f"[{idx}] {t_reason}")
+                        items_to_log.append(f"    └─ {detail}")
+                    else:
+                        items_to_log.append(t_reason)
+                        items_to_log.append(detail)
 
                 log_callback(f"   ┌─ {t_title}")
-                log_callback(f"   ├─ {t_pkg}")
-                log_callback(f"   ├─ {t_reason}")
-
-                if "broken_dependents" in event.data:
-                    dep_str = ", ".join(event.get("broken_dependents", []))
-                    t_detail = LanguageBridge.translate("pack_tree_broken_deps", "Balíček vyžadujú tieto komponenty: {0}").format(dep_str)
-                elif "required_by_linker_modules" in event.data:
-                    mod_str = ", ".join(event.get("required_by_linker_modules", []))
-                    t_detail = LanguageBridge.translate("pack_tree_linker_required", "Vyžadované Linker modulmi: {0}").format(mod_str)
-                elif "bound_parent" in event.data:
-                    t_detail = LanguageBridge.translate("pack_tree_extra_bound_parent", "Balíček je naviazaný cez extra na požiadavku: {0}").format(event.get("bound_parent"))
-                elif "defined_in_file" in event.data:
-                    t_detail = LanguageBridge.translate("pack_tree_locked_in_reqs", "Natvrdo zapísaný v: {0}").format(event.get("defined_in_file"))
-                else:
-                    t_detail = LanguageBridge.translate("pack_tree_core_protected", "Chránené jadrom systému.")
-
-                log_callback(f"   └─ {t_detail}")
+                for item in items_to_log[:-1]:
+                    log_callback(f"   ├─ {item}")
+                log_callback(f"   └─ {items_to_log[-1]}")
 
             # 5. FRONTA INŠTALÁCIE
             elif event.state == AptState.INSTALLING:
@@ -194,6 +215,19 @@ class PackageOperationsService:
         log_callback("\n" + "="*55)
         msg_start = LanguageBridge.translate("pack_start_install", "📦 [PackService] ŠTART INŠTALÁCIE: {0}").format(", ".join(packages))
         log_callback(msg_start)
+
+        # 0. KONTROLA INTEGRITY STAVU (100% ZHODA KĽÚČOV V JSON)
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as e:
+            err_msg = str(e)
+            log_callback(err_msg)
+            _unified_status(AptStatusEvent(
+                state=AptState.FAILED,
+                message=err_msg,
+                data={"reason": "corrupt_state"}
+            ))
+            return PackageOperationStatus.ERROR
 
         # 1. Pripravíme zoznam balíčkov vrátane extras
         items_to_check = []
@@ -350,6 +384,19 @@ class PackageOperationsService:
         log_callback("\n" + "="*55)
         msg_start_un = LanguageBridge.translate("pack_start_uninstall", "🗑️ [PackService] ŠTART ODINŠTALÁCIE: {0}").format(", ".join(packages))
         log_callback(msg_start_un)
+
+        # 0. KONTROLA INTEGRITY STAVU (100% ZHODA KĽÚČOV V JSON)
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as e:
+            err_msg = str(e)
+            log_callback(err_msg)
+            _unified_status(AptStatusEvent(
+                state=AptState.FAILED,
+                message=err_msg,
+                data={"reason": "corrupt_state"}
+            ))
+            return PackageOperationStatus.ERROR
 
         released_reqs = []
 

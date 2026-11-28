@@ -12,6 +12,7 @@ from typing import Callable, Optional
 from core._path import Paths
 from core.logic.commands.command_factory import PackageManagerFactory
 from core.logic.sluzby.requirements_parser import RequirementsParser
+from core.logic.sluzby.system.python_detector import PythonDetector
 from core.logic.sluzby.apt_state import AptState, AptStatusEvent
 from core.logic.sluzby.language_bridge import LanguageBridge
 from contextlib import contextmanager
@@ -55,7 +56,15 @@ class AptLogic:
     'autoremove' z uvoľnených balíčkov vždy vyradí tie, ktoré majú ešte aspoň jedného vlastníka.
     """
 
-    CORE_TOOLS = {"pip", "setuptools", "wheel", "virtualenv", "uv"}
+    _REQUIRED_STATE_KEYS = {
+        "system_packages",
+        "explicit",
+        "explicit_extras_bound",
+        "requirements_cache",
+        "requirements_extras_bound",
+        "linker_packages_bound",
+        "editable_packages_bound"
+    }
 
     _locks_guard = threading.Lock()
     _venv_locks = {}
@@ -141,6 +150,15 @@ class AptLogic:
                         del AptLogic._venv_locks[venv_path]
 
     @staticmethod
+    def _get_target_env(venv_path: str) -> Optional[dict]:
+        """Pomocná metóda na bezpečné získanie PEP 508 prostredia cieľového venvu."""
+        try:
+            python_exe = Paths.get_venv_python_exe_path(venv_path)
+            return PythonDetector.get_pep508_environment(python_exe)
+        except Exception:
+            return None
+
+    @staticmethod
     def _extract_package_name(token: str) -> str:
         extracted = RequirementsParser._extract_package_name(token)
         if extracted:
@@ -171,30 +189,23 @@ class AptLogic:
     @staticmethod
     def _load_state_data(venv_path: str) -> dict:
         state_file = AptLogic._get_state_file(venv_path)
-        if os.path.exists(state_file):
-            try:
-                with open(state_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if isinstance(data, dict):
-                        data.setdefault("explicit", [])
-                        data.setdefault("explicit_extras_bound", {})
-                        data.setdefault("requirements_cache", [])
-                        data.setdefault("requirements_extras_bound", {})
-                        data.setdefault("linker_packages_bound", {})
-                        data.setdefault("editable_packages_bound", {})
-                        data.setdefault("system_packages", None)
-                        return data
-            except Exception:
-                pass
-        return {
-            "explicit": [], 
-            "explicit_extras_bound": {},
-            "requirements_cache": [], 
-            "requirements_extras_bound": {},
-            "linker_packages_bound": {},
-            "editable_packages_bound": {},
-            "system_packages": None
-        }
+        venv_name = os.path.basename(os.path.normpath(venv_path))
+
+        if not os.path.exists(state_file):
+            raise RuntimeError(AptState.CORRUPT_STATE.format_message(venv=venv_name))
+
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError()
+        except Exception:
+            raise RuntimeError(AptState.CORRUPT_STATE.format_message(venv=venv_name))
+
+        if not AptLogic._REQUIRED_STATE_KEYS.issubset(data.keys()) or data.get("system_packages") is None:
+            raise RuntimeError(AptState.CORRUPT_STATE.format_message(venv=venv_name))
+
+        return data
 
     @staticmethod
     def _save_state_data(venv_path: str, data: dict) -> bool:
@@ -233,7 +244,15 @@ class AptLogic:
         pkg_name: str, 
         status_callback: Optional[Callable[[AptStatusEvent], None]] = None
     ) -> tuple[bool, str]:
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as err:
+            venv_name = os.path.basename(os.path.normpath(venv_path))
+            AptLogic._emit(AptState.CORRUPT_STATE, status_callback=status_callback, venv=venv_name)
+            return False, str(err)
+
         norm_pkg = AptLogic._normalize(pkg_name)
+        target_env = AptLogic._get_target_env(venv_path)
         
         AptLogic._emit(
             AptState.VERIFYING_SAFETY,
@@ -242,6 +261,9 @@ class AptLogic:
             data={"target_package": norm_pkg}
         )
 
+        collected_messages = []
+        collected_block_reasons = []
+
         # Ochrana č. 0: SYSTÉMOVÝ BALÍČEK venvu
         if AptLogic.is_system_package(venv_path, norm_pkg):
             msg = AptLogic._tr(
@@ -249,17 +271,10 @@ class AptLogic:
                 "🛑 OCHRANA: Balíček '{0}' je systémový balíček prostredia (vznikol pri vytvorení venvu) a nedá sa odinštalovať.",
                 norm_pkg
             )
-            AptLogic._emit(
-                AptState.FAILED,
-                status_callback=status_callback,
-                err=msg,
-                data={
-                    "target_package": norm_pkg,
-                    "can_uninstall": False,
-                    "block_reason": "SYSTEM_PACKAGE"
-                }
-            )
-            return False, msg
+            collected_messages.append(msg)
+            collected_block_reasons.append({
+                "block_reason": "SYSTEM_PACKAGE"
+            })
 
         # Ochrana č. 1: Reverzné závislosti
         deps = AptLogic.is_package_required_by_others(venv_path, core, norm_pkg, include_linker=False)
@@ -279,47 +294,37 @@ class AptLogic:
                 "❌ Nemožno odinštalovať '{0}', pretože je to TVRDÁ ZÁVISLOSŤ pre: {1}", 
                 norm_pkg, ", ".join(hard_deps)
             )
-            AptLogic._emit(
-                AptState.FAILED,
-                status_callback=status_callback,
-                err=msg,
-                data={
-                    "target_package": norm_pkg,
-                    "can_uninstall": False,
-                    "block_reason": "HARD_DEPENDENCY",
-                    "broken_dependents": hard_deps
-                }
-            )
-            return False, msg
+            collected_messages.append(msg)
+            collected_block_reasons.append({
+                "block_reason": "HARD_DEPENDENCY",
+                "broken_dependents": hard_deps
+            })
 
-        # Ochrana č. 2: SVÄTÉ PÍSMO (requirements.txt + jeho viazané extras)
+        # Ochrana č. 2: SVÄTÉ PÍSMO (requirements.txt + jeho viazané extras s PEP-508 filtrom)
         try:
             project_path = Paths.get_project_path(core.projects_root, core.active_project)
             req_file = Paths.get_requirements_txt_path(project_path)
             
             if os.path.exists(req_file):
-                raw_parsed = RequirementsParser.parse(req_file, pip_e_root=core.pip_e_packages_root)
-                parsed_reqs = {AptLogic._normalize(p) for p in raw_parsed}
+                raw_reqs_map = RequirementsParser.parse_requirements(req_file, pip_e_root=core.pip_e_packages_root)
+                # Berieme do úvahy iba tie deklarácie, ktoré vyhovujú aktuálnemu PEP-508 prostrediu
+                parsed_reqs = {
+                    norm: spec for norm, spec in raw_reqs_map.items()
+                    if RequirementsParser.is_marker_valid(spec, target_env=target_env)
+                }
                 
-                # A) Ak je balík priamo v requirements.txt
+                # A) Ak je balík priamo v platných požiadavkách
                 if norm_pkg in parsed_reqs:
                     msg = AptLogic._tr(
                         "apt_err_cannot_uninstall_reqs", 
                         "🛑 OCHRANA: Balíček '{0}' je definovaný v 'requirements.txt'!\n\nMusíte ho najprv vymazať (alebo zakomentovať) v tomto súbore, inak by ste rozbili definíciu prostredia.", 
                         norm_pkg
                     )
-                    AptLogic._emit(
-                        AptState.FAILED,
-                        status_callback=status_callback,
-                        err=msg,
-                        data={
-                            "target_package": norm_pkg,
-                            "can_uninstall": False,
-                            "block_reason": "IN_REQUIREMENTS",
-                            "defined_in_file": req_file
-                        }
-                    )
-                    return False, msg
+                    collected_messages.append(msg)
+                    collected_block_reasons.append({
+                        "block_reason": "IN_REQUIREMENTS",
+                        "defined_in_file": req_file
+                    })
 
                 # B) Skontrolujeme, či nie je naviazaný ako "extra" k niektorému balíku z requirements.txt
                 req_bounds = AptLogic.load_extras_bound(venv_path, context="requirements")
@@ -331,19 +336,11 @@ class AptLogic:
                             "🛑 OCHRANA: Balíček '{0}' je vyžiadaný cez extra väzbu z requirements.txt balíka '{1}'!\n\nNemôžete ho samostatne odinštalovať, pokiaľ je definovaný v požiadavkách.",
                             norm_pkg, req_parent
                         )
-                        AptLogic._emit(
-                            AptState.FAILED,
-                            status_callback=status_callback,
-                            err=msg,
-                            data={
-                                "target_package": norm_pkg,
-                                "can_uninstall": False,
-                                "block_reason": "REQUIREMENTS_EXTRA_BOUND",
-                                "bound_parent": req_parent
-                            }
-                        )
-                        return False, msg
-
+                        collected_messages.append(msg)
+                        collected_block_reasons.append({
+                            "block_reason": "REQUIREMENTS_EXTRA_BOUND",
+                            "bound_parent": req_parent
+                        })
         except Exception:
             pass
 
@@ -358,18 +355,11 @@ class AptLogic:
                     "🛑 OCHRANA: Balíček '{0}' je naviazaný cez [extras] na manuálne nainštalovaný balíček '{1}'!\n\nNemôžete ho samostatne odinštalovať, pokiaľ je vyžadovaný rodičom.",
                     norm_pkg, exp_parent
                 )
-                AptLogic._emit(
-                    AptState.FAILED,
-                    status_callback=status_callback,
-                    err=msg,
-                    data={
-                        "target_package": norm_pkg,
-                        "can_uninstall": False,
-                        "block_reason": "EXPLICIT_EXTRA_BOUND",
-                        "bound_parent": exp_parent
-                    }
-                )
-                return False, msg
+                collected_messages.append(msg)
+                collected_block_reasons.append({
+                    "block_reason": "EXPLICIT_EXTRA_BOUND",
+                    "bound_parent": exp_parent
+                })
 
         # Ochrana č. 3: 5. STAV - LOKÁLNY LINKER
         linker_parents = AptLogic.get_linker_modules_for_package(venv_path, norm_pkg)
@@ -379,18 +369,11 @@ class AptLogic:
                 "🛑 OCHRANA: Balíček '{0}' je vyžadovaný pripojeným lokálnym modulom: {1}!\n\nAk ho chcete odstrániť, najprv odlinkujte daný modul v okne Lokálne balíčky.",
                 norm_pkg, ", ".join(linker_parents)
             )
-            AptLogic._emit(
-                AptState.FAILED,
-                status_callback=status_callback,
-                err=msg,
-                data={
-                    "target_package": norm_pkg,
-                    "can_uninstall": False,
-                    "block_reason": "LINKER_MODULE_BOUND",
-                    "required_by_linker_modules": linker_parents
-                }
-            )
-            return False, msg
+            collected_messages.append(msg)
+            collected_block_reasons.append({
+                "block_reason": "LINKER_MODULE_BOUND",
+                "required_by_linker_modules": linker_parents
+            })
 
         # Ochrana č. 3.5: 6. STAV - LOKÁLNE EDITOVATEĽNÉ PROJEKTY (pip -e)
         editable_parents = AptLogic.get_editable_parents_for_package(venv_path, norm_pkg)
@@ -400,18 +383,29 @@ class AptLogic:
                 "🛑 OCHRANA: Balíček '{0}' je vyžadovaný editovateľným projektom (pip -e): {1}!\n\nAk ho chcete odstrániť, musíte najprv zmeniť závislosti alebo odstrániť príslušný -e riadok v requirements.txt.",
                 norm_pkg, ", ".join(editable_parents)
             )
+            collected_messages.append(msg)
+            collected_block_reasons.append({
+                "block_reason": "EDITABLE_PACKAGE_BOUND",
+                "required_by_editable": editable_parents
+            })
+
+        # =====================================================================
+        # HROMADNÉ VYHODNOTENIE: Ak sa našla aspoň jedna chyba, zablokujeme to
+        # =====================================================================
+        if collected_messages:
+            full_error_msg = "\n\n".join(collected_messages)
+            
             AptLogic._emit(
                 AptState.FAILED,
                 status_callback=status_callback,
-                err=msg,
+                err=full_error_msg,
                 data={
                     "target_package": norm_pkg,
                     "can_uninstall": False,
-                    "block_reason": "EDITABLE_PACKAGE_BOUND",
-                    "required_by_editable": editable_parents
+                    "block_reasons_list": collected_block_reasons
                 }
             )
-            return False, msg
+            return False, full_error_msg
 
         return True, ""
 
@@ -510,18 +504,16 @@ class AptLogic:
         log_callback=None,
         status_callback: Optional[Callable[[AptStatusEvent], None]] = None
     ) -> tuple[bool, str]:
-        try:
-            from PyQt6.QtWidgets import QApplication
-        except ImportError:
-            from PySide6.QtWidgets import QApplication
-
-        def _log(text):
-            if log_callback:
-                log_callback(text)
-                QApplication.processEvents()
+        target_env = AptLogic._get_target_env(venv_path)
 
         with AptLogic._get_venv_lock(venv_path):
-            state_data = AptLogic._load_state_data(venv_path)
+            try:
+                state_data = AptLogic._load_state_data(venv_path)
+            except RuntimeError as err:
+                venv_name = os.path.basename(os.path.normpath(venv_path))
+                AptLogic._emit(AptState.CORRUPT_STATE, log_callback=log_callback, status_callback=status_callback, progress_pct=100, venv=venv_name)
+                return False, str(err)
+
             req_cache = set(state_data.get("requirements_cache", []))
             req_bounds = state_data.get("requirements_extras_bound", {})
             
@@ -538,6 +530,18 @@ class AptLogic:
                     raw_spec = norm_pkg
 
                 norm_pkg = AptLogic._normalize(norm_pkg)
+
+                # --- 1. PEP 508 MARKER EVALUATION PRE CIEĽOVÉ VENV ---
+                if not RequirementsParser.is_marker_valid(raw_spec, target_env=target_env):
+                    msg_marker_skip = AptLogic._tr(
+                        "apt_check_marker_skipped",
+                        "  ℹ️ Balíček '{0}' je preskočený (podmienka markeru '{1}' neplatí pre cieľové prostredie).",
+                        norm_pkg, raw_spec
+                    )
+                    if log_callback:
+                        log_callback(msg_marker_skip)
+                    continue
+
                 installed_ver = installed_versions.get(norm_pkg)
                 is_installed = installed_ver is not None
 
@@ -559,13 +563,14 @@ class AptLogic:
                     all_skipped = False
                     continue
 
-                if not RequirementsParser.is_satisfied(raw_spec, installed_ver):
+                if not RequirementsParser.is_satisfied(raw_spec, installed_ver, target_env=target_env):
                     msg_ver_change = AptLogic._tr(
                         "apt_check_version_mismatch",
                         "  ⚡ Zistená zmena verzie pre '{0}': na disku je {1}, požadovaná je {2}. Spúšťam inštaláciu.",
                         norm_pkg, installed_ver, raw_spec
                     )
-                    _log(msg_ver_change)
+                    if log_callback:
+                        log_callback(msg_ver_change)
                     all_skipped = False
                     continue
 
@@ -649,12 +654,13 @@ class AptLogic:
             if AptLogic.is_in_requirements(venv_path, norm_pkg, state_data=data):
                 return
 
-            if norm_pkg in set(data.get("system_packages") or []) or norm_pkg in AptLogic.CORE_TOOLS:
+            if norm_pkg in set(data.get("system_packages") or []):
                 return
 
-            explicit = AptLogic.load_explicit_list(venv_path)
+            explicit = set(data.get("explicit", []))
             explicit.add(norm_pkg)
-            AptLogic.save_explicit_list(venv_path, explicit)
+            data["explicit"] = sorted(list(explicit))
+            AptLogic._save_state_data(venv_path, data)
 
     # =========================================================================
     # --- STAVY 3 & 4: EXTRAS BOUND (MANUÁLNE A CEZ REQUIREMENTS) ---
@@ -702,7 +708,8 @@ class AptLogic:
     @staticmethod
     def bind_extras(venv_path: str, parent_pkg: str, child_pkgs: list[str], context: str = "explicit"):
         norm_parent = AptLogic._normalize(parent_pkg)
-        if not child_pkgs or norm_parent in AptLogic.CORE_TOOLS:
+        system_pkgs = AptLogic.ensure_system_packages(venv_path)
+        if not child_pkgs or norm_parent in system_pkgs:
             return
 
         target_key = "explicit_extras_bound" if context == "explicit" else "requirements_extras_bound"
@@ -714,7 +721,7 @@ class AptLogic:
             current_children = set(bounds.get(norm_parent, []))
             for child in child_pkgs:
                 norm_child = AptLogic._normalize(child)
-                if norm_child in AptLogic.CORE_TOOLS or norm_child == norm_parent:
+                if norm_child in system_pkgs or norm_child == norm_parent:
                     continue
                 current_children.add(norm_child)
 
@@ -767,6 +774,7 @@ class AptLogic:
     @staticmethod
     def set_bound_extras_for_parent(venv_path: str, parent_pkg: str, child_pkgs: list[str], context: str = "requirements"):
         norm_parent = AptLogic._normalize(parent_pkg)
+        system_pkgs = AptLogic.ensure_system_packages(venv_path)
         target_key = "explicit_extras_bound" if context == "explicit" else "requirements_extras_bound"
 
         with AptLogic._get_venv_lock(venv_path):
@@ -776,7 +784,7 @@ class AptLogic:
             filtered = set()
             for child in child_pkgs:
                 norm_child = AptLogic._normalize(child)
-                if norm_child in AptLogic.CORE_TOOLS or norm_child == norm_parent:
+                if norm_child in system_pkgs or norm_child == norm_parent:
                     continue
                 filtered.add(norm_child)
 
@@ -798,19 +806,20 @@ class AptLogic:
             return data.get("linker_packages_bound", {})
 
     @staticmethod
-    def _clean_linker_entry(packages, extras_bound=None) -> dict:
+    def _clean_linker_entry(packages, extras_bound=None, system_pkgs: set = None) -> dict:
+        system_pkgs = system_pkgs or set()
         clean_pkgs = sorted({
             n for n in (AptLogic._normalize(p) for p in (packages or []))
-            if n and n not in AptLogic.CORE_TOOLS
+            if n and n not in system_pkgs
         })
         clean_extras = {}
         for p_pkg, c_list in (extras_bound or {}).items():
             p_norm = AptLogic._normalize(p_pkg)
-            if not p_norm or p_norm in AptLogic.CORE_TOOLS:
+            if not p_norm or p_norm in system_pkgs:
                 continue
             valid_children = sorted({
                 n for n in (AptLogic._normalize(c) for c in (c_list or []))
-                if n and n not in AptLogic.CORE_TOOLS and n != p_norm
+                if n and n not in system_pkgs and n != p_norm
             })
             if valid_children:
                 clean_extras[p_norm] = valid_children
@@ -836,7 +845,8 @@ class AptLogic:
         if not norm_mod:
             return []
 
-        new_entry = AptLogic._clean_linker_entry(packages, extras_bound)
+        system_pkgs = AptLogic.ensure_system_packages(venv_path)
+        new_entry = AptLogic._clean_linker_entry(packages, extras_bound, system_pkgs=system_pkgs)
 
         with AptLogic._get_venv_lock(venv_path):
             data = AptLogic._load_state_data(venv_path)
@@ -849,13 +859,14 @@ class AptLogic:
 
     @staticmethod
     def sync_linker_state(venv_path: str, modules: dict[str, dict]) -> list[str]:
+        system_pkgs = AptLogic.ensure_system_packages(venv_path)
         new_bounds = {}
         for mod_name, info in (modules or {}).items():
             norm_mod = str(mod_name).strip()
             if not norm_mod:
                 continue
             info = info or {}
-            new_bounds[norm_mod] = AptLogic._clean_linker_entry(info.get("packages", []), info.get("extras_bound", {}))
+            new_bounds[norm_mod] = AptLogic._clean_linker_entry(info.get("packages", []), info.get("extras_bound", {}), system_pkgs=system_pkgs)
 
         with AptLogic._get_venv_lock(venv_path):
             data = AptLogic._load_state_data(venv_path)
@@ -944,18 +955,19 @@ class AptLogic:
         Vypočíta diff oproti predošlému stavu a vráti zoznam uvoľnených závislostí.
         """
         norm_pkg = AptLogic._normalize(pkg_name)
+        system_pkgs = AptLogic.ensure_system_packages(venv_path)
         clean_pkgs = sorted({
             n for n in (AptLogic._normalize(p) for p in (packages or []))
-            if n and n not in AptLogic.CORE_TOOLS and n != norm_pkg
+            if n and n not in system_pkgs and n != norm_pkg
         })
         clean_extras = {}
         for p_pkg, c_list in (extras_bound or {}).items():
             p_norm = AptLogic._normalize(p_pkg)
-            if not p_norm or p_norm in AptLogic.CORE_TOOLS:
+            if not p_norm or p_norm in system_pkgs:
                 continue
             valid_children = sorted({
                 n for n in (AptLogic._normalize(c) for c in (c_list or []))
-                if n and n not in AptLogic.CORE_TOOLS and n != p_norm
+                if n and n not in system_pkgs and n != p_norm
             })
             if valid_children:
                 clean_extras[p_norm] = valid_children
@@ -1061,38 +1073,35 @@ class AptLogic:
         if not names:
             return []
         with AptLogic._get_venv_lock(venv_path):
-            data = AptLogic._load_state_data(venv_path)
-            data["system_packages"] = names
+            state_file = AptLogic._get_state_file(venv_path)
+            data = {
+                "system_packages": names,
+                "explicit": [],
+                "explicit_extras_bound": {},
+                "requirements_cache": [],
+                "requirements_extras_bound": {},
+                "linker_packages_bound": {},
+                "editable_packages_bound": {}
+            }
+            if os.path.exists(state_file):
+                try:
+                    with open(state_file, 'r', encoding='utf-8') as f:
+                        loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            data.update(loaded)
+                            data["system_packages"] = names
+                except Exception:
+                    pass
+
             if not AptLogic._save_state_data(venv_path, data):
                 raise RuntimeError(AptLogic._tr("apt_err_state_save_failed", "Zápis venvhub_apt_state.json zlyhal."))
         return names
 
     @staticmethod
-    def _estimate_system_packages(venv_path: str) -> list[str]:
-        installed = AptLogic._scan_installed_dist_names(venv_path)
-        queue = [p for p in AptLogic.CORE_TOOLS if p in installed]
-        found = set()
-        while queue:
-            current = queue.pop(0)
-            if current in found:
-                continue
-            found.add(current)
-            for dep in AptLogic._get_all_requires_from_metadata(venv_path, current):
-                if dep in installed and dep not in found:
-                    queue.append(dep)
-        return sorted(found)
-
-    @staticmethod
     def ensure_system_packages(venv_path: str) -> set[str]:
         with AptLogic._get_venv_lock(venv_path):
             data = AptLogic._load_state_data(venv_path)
-            pkgs = data.get("system_packages")
-            if pkgs is None:
-                pkgs = AptLogic._estimate_system_packages(venv_path)
-                if pkgs:
-                    data["system_packages"] = pkgs
-                    AptLogic._save_state_data(venv_path, data)
-            return set(pkgs or []) | set(AptLogic.CORE_TOOLS)
+            return set(data.get("system_packages") or [])
 
     @staticmethod
     def is_system_package(venv_path: str, pkg_name: str) -> bool:
@@ -1105,7 +1114,8 @@ class AptLogic:
     @staticmethod
     def resolve_extras_family(venv_path: str, parent_pkg: str, requested_extras: list[str]) -> list[str]:
         norm_parent = AptLogic._normalize(parent_pkg)
-        if not requested_extras or norm_parent in AptLogic.CORE_TOOLS:
+        system_pkgs = AptLogic.ensure_system_packages(venv_path)
+        if not requested_extras or norm_parent in system_pkgs:
             return []
 
         site_pkgs = AptLogic._get_site_packages_dir(venv_path)
@@ -1133,7 +1143,7 @@ class AptLogic:
 
         while queue:
             current = queue.pop(0)
-            if current in visited or current in AptLogic.CORE_TOOLS:
+            if current in visited or current in system_pkgs:
                 continue
             visited.add(current)
             all_family.add(current)
@@ -1205,13 +1215,16 @@ class AptLogic:
         return extras_map
 
     @staticmethod
-    def _get_all_requires_from_metadata(venv_path: str, pkg_name: str) -> list[str]:
+    def _get_all_requires_from_metadata(venv_path: str, pkg_name: str, target_env: dict = None) -> list[str]:
         reqs = set()
         norm_target = AptLogic._normalize(pkg_name)
         site_pkgs = AptLogic._get_site_packages_dir(venv_path)
 
         if not os.path.exists(site_pkgs):
             return []
+
+        if target_env is None:
+            target_env = AptLogic._get_target_env(venv_path)
 
         try:
             for entry in os.listdir(site_pkgs):
@@ -1224,13 +1237,33 @@ class AptLogic:
                                 for line in f:
                                     if line.startswith("Requires-Dist:"):
                                         val = line.split(":", 1)[1].strip()
+
+                                        # --- PEP-508 Marker overenie pre cieľové prostredie ---
+                                        if not RequirementsParser.is_marker_valid(val, target_env=target_env):
+                                            continue
+                                        
+                                        # 1. Ignorujeme extra podmienené prostredia
                                         if "extra ==" not in val:
                                             dep_raw = val.split(";")[0].strip()
                                             clean_dep = AptLogic._extract_package_name(dep_raw)
                                             if clean_dep:
-                                                reqs.add(AptLogic._normalize(clean_dep))
+                                                norm_dep = AptLogic._normalize(clean_dep)
+                                                reqs.add(norm_dep)
+
+                                                # --- Detekcia vnorených extras cez bezpečný RequirementsParser ---
+                                                extras_list = RequirementsParser.extract_extras(dep_raw)
+                                                if extras_list:
+                                                    extras_map = AptLogic.get_extras_map_from_metadata(venv_path, norm_dep)
+                                                    for ext in extras_list:
+                                                        for extra_child in extras_map.get(ext, []):
+                                                            reqs.add(extra_child)
         except Exception:
             pass
+
+        # Pridanie explicitne naviazaných balíčkov zo stavového JSONu
+        bound_children = AptLogic.get_bound_children(venv_path, norm_target)
+        for child in bound_children:
+            reqs.add(child)
 
         return sorted(list(reqs))
 
@@ -1358,6 +1391,7 @@ class AptLogic:
             dispatcher = PackageManagerFactory.get_dispatcher(core.package_manager, venv_path)
             CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
             graph = {}
+            target_env = AptLogic._get_target_env(venv_path)
 
             try:
                 list_cmd = dispatcher.get("list_json")
@@ -1402,7 +1436,7 @@ class AptLogic:
                                 for r in reqs.split(",") if r.strip()
                             ] if reqs else []
 
-                            meta_reqs = AptLogic._get_all_requires_from_metadata(venv_path, current_pkg)
+                            meta_reqs = AptLogic._get_all_requires_from_metadata(venv_path, current_pkg, target_env=target_env)
                             all_deps = set(base_reqs + meta_reqs)
                             graph[current_pkg] = list(all_deps)
             except Exception:
@@ -1441,7 +1475,7 @@ class AptLogic:
         return versions
 
     # =========================================================================
-    # --- SYNCHRONIZÁCIA: INSTALL_SYNC (PLNE STAVOVÝ) ---
+    # --- SYNCHRONIZÁCIA: INSTALL_SYNC (PLNE STAVOVÝ S PEP 508 MARKERMI) ---
     # =========================================================================
 
     @staticmethod
@@ -1453,6 +1487,19 @@ class AptLogic:
         status_callback: Optional[Callable[[AptStatusEvent], None]] = None
     ) -> bool:
         with AptLogic._get_venv_lock(venv_path):
+            try:
+                state_data = AptLogic._load_state_data(venv_path)
+            except RuntimeError as e:
+                venv_name = os.path.basename(os.path.normpath(venv_path))
+                AptLogic._emit(
+                    AptState.CORRUPT_STATE,
+                    log_callback=log_callback,
+                    status_callback=status_callback,
+                    progress_pct=100,
+                    venv=venv_name
+                )
+                return False
+
             AptLogic._emit(
                 AptState.DIFF_CALCULATING,
                 log_callback=log_callback,
@@ -1465,13 +1512,33 @@ class AptLogic:
                     project_path = Paths.get_project_path(core.projects_root, core.active_project)
                     req_file_path = Paths.get_requirements_txt_path(project_path)
 
+                # PEP 508 prostredie cieľového venvu
+                target_env = AptLogic._get_target_env(venv_path)
+                system_pkgs = set(state_data.get("system_packages") or [])
+
                 pamat_extras = AptLogic._scan_requirements_for_extras(req_file_path, core=core)
 
                 pip_e_root = getattr(core, 'pip_e_packages_root', '')
-                requirements_map = RequirementsParser.parse_requirements(req_file_path, pip_e_root=pip_e_root) if os.path.exists(req_file_path) else {}
+                raw_requirements_map = RequirementsParser.parse_requirements(req_file_path, pip_e_root=pip_e_root) if os.path.exists(req_file_path) else {}
+
+                # =============================================================
+                # KROK 0: FILTROVANIE POŽIADAVIEK CEZ PEP 508 ENVIRONMENT MARKERY
+                # Do wanted_packages sa dostanú LEN tie, ktoré platia pre cieľový systém!
+                # =============================================================
+                requirements_map = {}
+                for norm_pkg, req_line in raw_requirements_map.items():
+                    if RequirementsParser.is_marker_valid(req_line, target_env=target_env):
+                        requirements_map[norm_pkg] = req_line
+                    else:
+                        if log_callback:
+                            log_callback(AptLogic._tr(
+                                "apt_marker_skipped_env",
+                                "  ℹ️ Preskakujem požiadavku '{0}': podmienka prostredia ({1}) neplatí pre toto prostredie.",
+                                norm_pkg, req_line
+                            ))
+
                 wanted_packages = set(requirements_map.keys())
 
-                state_data = AptLogic._load_state_data(venv_path)
                 cached_reqs = set(state_data.get("requirements_cache", []))
                 released_from_reqs = list(cached_reqs - wanted_packages)
 
@@ -1488,14 +1555,22 @@ class AptLogic:
                         raw_path = req_line[3:].strip()
 
                         # 1. PRED-KONTROLA: Načítame závislosti priamo zo zdrojov (pyproject.toml/setup.py)
-                        editable_deps = AptLogic.get_editable_project_dependencies(raw_path)
+                        raw_editable_deps = AptLogic.get_editable_project_dependencies(raw_path)
+                        # Filtrujeme aj závislosti v projekte podľa markerov pre cieľové venv
+                        editable_deps = [
+                            d for d in raw_editable_deps
+                            if RequirementsParser.is_marker_valid(d, target_env=target_env)
+                        ]
 
                         stored_entry = state_data.get("editable_packages_bound", {}).get(norm_pkg, {})
                         stored_deps = set(stored_entry.get("packages", []))
                         current_source_deps = {
-                            AptLogic._normalize(RequirementsParser._extract_package_name(d))
-                            for d in editable_deps
-                            if RequirementsParser._extract_package_name(d)
+                            n for n in (
+                                AptLogic._normalize(RequirementsParser._extract_package_name(d))
+                                for d in editable_deps
+                                if RequirementsParser._extract_package_name(d)
+                            )
+                            if n not in system_pkgs and n != norm_pkg
                         }
 
                         # Ak balíček chýba ALEBO sa zmenili jeho deklarované závislosti v TOML:
@@ -1513,18 +1588,35 @@ class AptLogic:
                                 if ed_dep not in missing_standard_args:
                                     missing_log_labels.append(f"{ed_dep} (pre {norm_pkg})")
                                     missing_standard_args.append(ed_dep)
-                            elif not RequirementsParser.is_satisfied(ed_dep, dep_inst_ver):
+                            elif not RequirementsParser.is_satisfied(ed_dep, dep_inst_ver, target_env=target_env):
                                 if ed_dep not in missing_standard_args:
                                     missing_log_labels.append(f"{ed_dep} (akt: {dep_inst_ver})")
                                     missing_standard_args.append(ed_dep)
                     else:
                         # Štandardný bežný balíček
+                        req_extras = RequirementsParser.extract_extras(req_line)
+
                         if not inst_ver:
                             missing_log_labels.append(norm_pkg)
                             missing_standard_args.append(req_line)
-                        elif not RequirementsParser.is_satisfied(req_line, inst_ver):
+                        elif not RequirementsParser.is_satisfied(req_line, inst_ver, target_env=target_env):
                             missing_log_labels.append(f"{norm_pkg} (akt: {inst_ver} -> žiad: {req_line})")
                             missing_standard_args.append(req_line)
+                        elif req_extras:
+                            # 3. KONTROLA EXTRAS: Verzia balíčka sedí, ale musíme overiť, či sú na disku a v stave aj jeho extras
+                            req_bounds = set(state_data.get("requirements_extras_bound", {}).get(norm_pkg, []))
+                            extras_map = AptLogic.get_extras_map_from_metadata(venv_path, norm_pkg)
+
+                            uncovered = [
+                                kid for extra in req_extras
+                                for kid in extras_map.get(AptLogic._normalize(extra), [])
+                                if kid not in req_bounds or kid not in installed_versions
+                            ]
+
+                            # Ak v požiadavkách pribudol extra, ktorý ešte nie je v JSON-e, alebo jeho pod-balíček chýba na disku:
+                            if uncovered or (norm_pkg not in state_data.get("requirements_extras_bound", {})):
+                                missing_log_labels.append(f"{norm_pkg}[{', '.join(req_extras)}]")
+                                missing_standard_args.append(req_line)
 
                 if released_from_reqs and log_callback:
                     log_callback(AptLogic._tr("apt_released_from_reqs", "  🔻 Uvoľnené zo súboru: {pkgs}", pkgs=', '.join(released_from_reqs)))
@@ -1543,6 +1635,7 @@ class AptLogic:
 
                     proc_e = subprocess.Popen(
                         install_e_cmd, 
+                        stdin=subprocess.DEVNULL,
                         stdout=subprocess.PIPE, 
                         stderr=subprocess.STDOUT, 
                         text=True, 
@@ -1586,6 +1679,7 @@ class AptLogic:
 
                     process = subprocess.Popen(
                         install_std_cmd, 
+                        stdin=subprocess.DEVNULL,
                         stdout=subprocess.PIPE, 
                         stderr=subprocess.STDOUT, 
                         text=True, 
@@ -1663,17 +1757,20 @@ class AptLogic:
                         installed_editable_in_reqs.add(norm_pkg)
                         raw_path = req_line[3:].strip()
                         
-                        # 1. Načítame aktuálne závislosti priamo zo zdroja (pyproject.toml/setup.py) cez RequirementsParser:
                         raw_project_deps = RequirementsParser.get_project_dependencies(raw_path)
                         
                         deps = []
                         extras_bound_map = {}
 
                         for raw_dep in raw_project_deps:
+                            # Rešpektovanie markerov v deklaráciách editovateľného projektu
+                            if not RequirementsParser.is_marker_valid(raw_dep, target_env=target_env):
+                                continue
+
                             clean_name = RequirementsParser._extract_package_name(raw_dep)
                             if clean_name:
                                 norm_dep = AptLogic._normalize(clean_name)
-                                if norm_dep not in AptLogic.CORE_TOOLS and norm_dep != norm_pkg:
+                                if norm_dep not in system_pkgs and norm_dep != norm_pkg:
                                     deps.append(norm_dep)
 
                                 req_exts = RequirementsParser.extract_extras(raw_dep)
@@ -1684,7 +1781,6 @@ class AptLogic:
 
                         deps = sorted(list(set(deps)))
 
-                        # 2. Zaregistrujeme do stavu a vypočítame uvoľnené (dropped) závislosti
                         dropped_editable_deps = AptLogic.bind_editable_package(
                             venv_path=venv_path,
                             pkg_name=norm_pkg,
@@ -1808,6 +1904,19 @@ class AptLogic:
         released_packages=None
     ) -> bool:
         with AptLogic._get_venv_lock(venv_path):
+            try:
+                state_data = AptLogic._load_state_data(venv_path)
+            except RuntimeError as e:
+                venv_name = os.path.basename(os.path.normpath(venv_path))
+                AptLogic._emit(
+                    AptState.CORRUPT_STATE,
+                    log_callback=log_callback,
+                    status_callback=status_callback,
+                    progress_pct=100,
+                    venv=venv_name
+                )
+                return False
+
             mgr_label = "UV" if getattr(core, "package_manager", "pip") == "uv" else "PIP"
 
             graph = AptLogic.get_dependency_graph(venv_path, core, status_callback=status_callback)
@@ -1830,10 +1939,9 @@ class AptLogic:
                 return True
 
             all_installed = set(graph.keys())
-            core_roots = (AptLogic.CORE_TOOLS | AptLogic.ensure_system_packages(venv_path)) & all_installed
+            system_roots = set(state_data.get("system_packages") or []) & all_installed
 
-            explicit_roots = AptLogic.load_explicit_list(venv_path)
-            state_data = AptLogic._load_state_data(venv_path)
+            explicit_roots = set(state_data.get("explicit", []))
             explicit_roots.update(state_data.get("requirements_cache", []))
             explicit_roots.update(AptLogic.get_all_linker_required_packages(venv_path))
 
@@ -1871,14 +1979,14 @@ class AptLogic:
                             queue.append(dep)
                 return required
 
-            auto_needed = get_all_required(explicit_roots | core_roots)
+            auto_needed = get_all_required(explicit_roots | system_roots)
             released_tree = get_all_required(norm_released)
             released_tree.update(norm_released)
 
-            state_explicit = AptLogic.load_explicit_list(venv_path)
+            state_explicit = set(state_data.get("explicit", []))
             new_manual_found = False
             for pkg in all_installed:
-                if pkg not in explicit_roots and pkg not in auto_needed and pkg not in AptLogic.CORE_TOOLS and pkg not in core_roots:
+                if pkg not in explicit_roots and pkg not in auto_needed and pkg not in system_roots:
                     if pkg in released_tree:
                         continue
                     explicit_roots.add(pkg)
@@ -1887,9 +1995,9 @@ class AptLogic:
 
             if new_manual_found:
                 AptLogic.save_explicit_list(venv_path, state_explicit)
-                auto_needed = get_all_required(explicit_roots | core_roots)
+                auto_needed = get_all_required(explicit_roots | system_roots)
 
-            orphans = all_installed - explicit_roots - auto_needed - AptLogic.CORE_TOOLS - core_roots
+            orphans = all_installed - explicit_roots - auto_needed - system_roots
 
             if not orphans:
                 if log_callback:
@@ -1911,29 +2019,33 @@ class AptLogic:
             uninstall_args = dispatcher.get("uninstall_multiple", packages=list(orphans))
 
             try:
-                process = subprocess.Popen(uninstall_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=CREATE_NO_WINDOW)
+                process = subprocess.Popen(
+                    uninstall_args,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    creationflags=CREATE_NO_WINDOW
+                )
 
-                def _read_output():
-                    for line in process.stdout:
-                        if log_callback:
-                            log_callback(f"  {line.strip()}")
+                for line in process.stdout:
+                    if log_callback:
+                        log_callback(f"  {line.strip()}")
 
-                reader_thread = threading.Thread(target=_read_output, daemon=True)
-                reader_thread.start()
-                reader_thread.join(timeout=60)
+                process.wait()
 
-                if reader_thread.is_alive():
-                    process.kill()
-                    reader_thread.join(timeout=5)
+                if process.returncode != 0:
                     AptLogic._emit(
                         AptState.FAILED,
                         log_callback=log_callback,
                         status_callback=status_callback,
-                        err=AptLogic._tr("apt_uninstall_timeout", "❌ [APT] Odinštalácia prekročila časový limit (60s).")
+                        err=AptLogic._tr("apt_uninstall_failed", "❌ [APT] Odinštalácia balíčkov zlyhala."),
+                        data={"exit_code": process.returncode}
                     )
                     return False
 
-                process.wait(timeout=5)
                 return True
 
             except Exception as e:

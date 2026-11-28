@@ -172,6 +172,15 @@ class LocalLinkerService:
                 except Exception:
                     pass
 
+        # 0. KONTROLA INTEGRITY STAVU (100% ZHODA KĽÚČOV V JSON)
+        try:
+            AptLogic._load_state_data(venv_path)
+        except RuntimeError as e:
+            err_msg = str(e)
+            log_callback(err_msg)
+            _emit_state(AptState.FAILED, err_msg, data={"reason": "corrupt_state"})
+            return LinkerOperationStatus.ERROR, err_msg
+
         # 0. ZISTÍME AKTUÁLNE LINKOVANÉ MODULY V SITE-PACKAGES
         site_folder = "Lib" if os.name == 'nt' else "lib"
         site_packages = os.path.join(venv_path, site_folder, "site-packages")

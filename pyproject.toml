@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "VenvHub_v2.6.07"
+version = "0.1.0"
+description = "Exported from VenvHub Pro"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "psutil==7.2.2",
+    "pyinstaller==6.22.3",
+    "pyside6==6.12.0",
+    "requests==2.34.2",
+    "uv==0.13.7",
+]

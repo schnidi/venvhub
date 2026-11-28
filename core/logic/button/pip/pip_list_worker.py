@@ -2,8 +2,10 @@
 # Súbor: core/logic/button/pip/pip_list_worker.py
 #----------------------------------------
 
+import traceback
 from PyQt6.QtCore import QObject, pyqtSignal
 from .load_list import LoadListHandler
+
 
 class PipListWorker(QObject):
     finished = pyqtSignal(list)
@@ -19,4 +21,5 @@ class PipListWorker(QObject):
             packages = LoadListHandler.get_packages(self.venv_path, self.manager_type)
             self.finished.emit(packages)
         except Exception as e:
-            self.error.emit(f"Nastala chyba pri načítavaní balíčkov: {e}")
+            tb = traceback.format_exc()
+            self.error.emit(f"Nastala chyba pri načítavaní balíčkov: {e}\n\n{tb}")

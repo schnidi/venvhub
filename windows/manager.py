@@ -15,6 +15,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from core._path import Paths
 from core.core_bridge import CoreBridge
 
+
 from core.logic.button.manager.create import CreateVenvHandler
 from core.logic.button.manager.activate import ActivateHandler
 from core.logic.button.manager.delete import DeleteHandler
@@ -42,6 +43,7 @@ from core.logic.sluzby.windows_location import WindowLocation
 from core.logic.box.ide_settings import IDESettingsHandler
 
 from windows.custom_message_box import CustomMessageBox
+from windows.venv_tree_window import VenvTreeWindow
 
 
 class MasterManager(QWidget):
@@ -73,6 +75,7 @@ class MasterManager(QWidget):
         self.local_pkg_window = None 
         self.pip_e_window = None
         self.vscode_user_window = None 
+        self.venv_tree_window = None
         
         self.title_bar = CustomTitleBar(self)
         self.title_bar_layout.addWidget(self.title_bar)
@@ -377,6 +380,28 @@ class MasterManager(QWidget):
         self.pip_e_window.raise_()
         self.pip_e_window.activateWindow()
 
+    def open_venv_tree_window(self):
+        """Otvorí okno stromu závislostí pre vybraný venv."""
+        if not self.selected_venv_path:
+            CustomMessageBox.warning(
+                self, 
+                CoreBridge.translate("title_error", "Chyba"), 
+                CoreBridge.translate("msg_select_venv_first", "Najprv vyberte prostredie v tabuľke.")
+            )
+            return
+
+        if not CoreBridge.verify_venv_access(self.selected_venv_path):
+            CustomMessageBox.show_portability_blocked(self, os.path.basename(self.selected_venv_path))
+            return
+
+        if self.venv_tree_window is not None:
+            self.venv_tree_window.close()
+
+        self.venv_tree_window = VenvTreeWindow(self, self.selected_venv_path)
+        self.venv_tree_window.show()
+        self.venv_tree_window.raise_()
+        self.venv_tree_window.activateWindow()
+
     def open_vscode_user_window(self):
         """Otvorí okno správy profilov editora pre aktívne IDE."""
         if self.vscode_user_window is not None:
@@ -450,6 +475,11 @@ class MasterManager(QWidget):
             action_manage = menu.addAction(CoreBridge.translate("ctx_manage_packages", "📦 Spravovať balíčky (Pip Manager)"))
             action_manage.triggered.connect(self.open_pip_manager)
             
+            # --- NOVÉ TLAČIDLO PRE STROM ZÁVISLOSTÍ ---
+            action_tree = menu.addAction(CoreBridge.translate("ctx_venv_tree", "🌳 Strom závislostí (Venv Tree)"))
+            action_tree.triggered.connect(self.open_venv_tree_window)
+            # ------------------------------------------
+
             action_local_pkg = menu.addAction(CoreBridge.translate("ctx_local_packages", "🔗 Lokálne balíčky"))
             action_local_pkg.triggered.connect(self.open_local_packages_window)
 

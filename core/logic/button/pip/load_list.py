@@ -27,8 +27,10 @@ class LoadListHandler:
     @staticmethod
     def get_packages(venv_path, manager_type="pip"):
         """
-        Bezpečný načítavač balíčkov pre bežný aj zabalený (PyInstaller) režim.
+        Univerzálny načítavač balíčkov (Paralelná verzia pre bežný aj PyInstaller režim).
         """
+        from concurrent.futures.thread import ThreadPoolExecutor
+
         CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
         dispatcher = PackageManagerFactory.get_dispatcher(manager_type, venv_path)
         clean_env = LoadListHandler._get_clean_env()
@@ -40,9 +42,9 @@ class LoadListHandler:
             """Bezpečne spustí príkaz s izolovaným prostredím."""
             try:
                 result = subprocess.run(
-                    cmd, 
-                    capture_output=True, 
-                    text=True, 
+                    cmd,
+                    capture_output=True,
+                    text=True,
                     creationflags=CREATE_NO_WINDOW,
                     env=clean_env,
                     encoding='utf-8',
@@ -54,27 +56,30 @@ class LoadListHandler:
                 pass
             return []
 
-        # 1. Získanie zoznamu nainštalovaných balíčkov
-        installed_data = run_command(cmd_list)
+        # 1. Paralelné získanie zoznamov
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_installed = executor.submit(run_command, cmd_list)
+            future_outdated = executor.submit(run_command, cmd_outdated)
+
+            installed_data = future_installed.result()
+            outdated_data = future_outdated.result()
+
         if not installed_data or not isinstance(installed_data, list):
             return []
-
-        # 2. Získanie zoznamu zastaraných balíčkov (outdated)
-        outdated_data = run_command(cmd_outdated)
         if not isinstance(outdated_data, list):
             outdated_data = []
 
-        # 3. Spárovanie verzií
+        # 2. Spárovanie verzií
         installed_map = {item['name']: item['version'] for item in installed_data if 'name' in item}
         outdated_map = {item['name']: item.get('latest_version', item.get('version')) for item in outdated_data if 'name' in item}
-        
+
         packages = []
         for name, version in installed_map.items():
-            latest = outdated_map.get(name, version) 
+            latest = outdated_map.get(name, version)
             packages.append({
                 'name': name,
                 'version': version,
                 'latest': latest
             })
-            
+
         return sorted(packages, key=lambda x: x['name'].lower())

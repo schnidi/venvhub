@@ -15,6 +15,7 @@ import shutil
 import platform
 import threading
 import subprocess
+import json
 from dataclasses import dataclass
 
 from core._path import Paths
@@ -61,11 +62,13 @@ class PythonDetector:
     _cached_runtimes: list[PythonRuntimeInfo] | None = None
     _active_python_path: str | None = None
     _detector_status: PythonDetectorStatus = PythonDetectorStatus.SUCCESS
+    
+    _target_environments_cache: dict = {}
 
     _lock = threading.RLock()
 
     # =========================================================================
-    # 1. SPRÁVA AKTÍVNEHO INTERPRETRA
+    # 1. SPRÁVA AKTÍVNEHO INTERPRETRA A PEP-508 PROSTREDIA
     # =========================================================================
 
     @classmethod
@@ -79,6 +82,38 @@ class PythonDetector:
         """Vráti aktívny interpreter, inak sys.executable."""
         with cls._lock:
             return cls._active_python_path or os.path.normpath(sys.executable)
+
+    @classmethod
+    def get_pep508_environment(cls, python_path: str) -> dict | None:
+        """
+        Zistí PEP-508 environment parametre (sys_platform, python_version...) 
+        z konkrétneho Python interpretra. Výsledky kešuje pre maximálny výkon.
+        """
+        if not python_path or not os.path.exists(python_path):
+            return None
+
+        canonical = os.path.realpath(os.path.normpath(python_path))
+        
+        with cls._lock:
+            if canonical in cls._target_environments_cache:
+                return cls._target_environments_cache[canonical]
+
+            script = "import json; from packaging.markers import default_environment; print(json.dumps(default_environment()))"
+            
+            try:
+                CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
+                res = subprocess.run(
+                    [canonical, "-c", script],
+                    capture_output=True, text=True, creationflags=CREATE_NO_WINDOW, timeout=2.0
+                )
+                if res.returncode == 0:
+                    env_data = json.loads(res.stdout.strip())
+                    cls._target_environments_cache[canonical] = env_data
+                    return env_data
+            except Exception:
+                pass
+            
+            return None
 
     # =========================================================================
     # 2. RESOLVE MATERSKÉHO PYTHONU Z VENV (pyvenv.cfg)

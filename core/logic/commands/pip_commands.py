@@ -83,6 +83,9 @@ class PipCommandDispatcher:
 
             "uninstall_multiple": lambda **kwargs: 
                 [self.python_exe, "-m", "pip", "uninstall", "-y"] + kwargs['packages'],
+
+            "compile_hashes": lambda **kwargs: 
+                [self.python_exe, "-m", "piptools", "compile", "--generate-hashes", kwargs['src_file'], "-o", kwargs['dst_file']],
         }
 
     def get(self, command_key: str, **kwargs: Any) -> list[str]:

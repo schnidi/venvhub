@@ -1,5 +1,6 @@
 import os
 import re
+from packaging.markers import Marker
 
 class RequirementsParser:
     """
@@ -25,6 +26,24 @@ class RequirementsParser:
             return ""
             
         return normalized
+
+    @staticmethod
+    def is_marker_valid(requirement_line: str, target_env: dict = None) -> bool:
+        """
+        Oddelí marker za bodkočiarkou a vyhodnotí ho voči cieľovému prostrediu.
+        Vráti True, ak balíček vyhovuje (alebo nemá marker). Vráti False, ak ho treba zahodiť.
+        """
+        if ";" not in requirement_line:
+            return True 
+            
+        marker_str = requirement_line.split(";", 1)[1].strip()
+        try:
+            marker = Marker(marker_str)
+            if target_env:
+                return marker.evaluate(environment=target_env)
+            return marker.evaluate() 
+        except Exception:
+            return True # Ak je marker chybný, pre istotu balík akceptujeme
 
     @staticmethod
     def _extract_package_name(token: str) -> str | None:
@@ -135,7 +154,7 @@ class RequirementsParser:
         return os.path.basename(dir_path)
 
     @staticmethod
-    def parse(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None) -> set[str]:
+    def parse(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None, target_env: dict = None) -> set[str]:
         if depth > 50:
             print(f"[RequirementsParser] Varovanie: Prekročená max. hĺbka rekurzie (50) pri '{file_path}'.")
             return set()
@@ -214,10 +233,14 @@ class RequirementsParser:
                             nested_abs_path = os.path.realpath(os.path.join(current_dir, nested_rel_path))
 
                             try:
-                                nested_packages = RequirementsParser.parse(nested_abs_path, visited_files, depth + 1, base_dir, pip_e_root)
+                                nested_packages = RequirementsParser.parse(nested_abs_path, visited_files, depth + 1, base_dir, pip_e_root, target_env=target_env)
                                 packages.update(nested_packages)
                             except Exception as e:
                                 print(f"[RequirementsParser] Varovanie: Zlyhalo spracovanie '{nested_abs_path}': {e}")
+                        continue
+
+                    # Overenie markeru: Ak neplatí pre cieľové prostredie, riadok zahodíme
+                    if not RequirementsParser.is_marker_valid(line, target_env=target_env):
                         continue
 
                     editable_match = re.match(r'^(?:-e\s+|--editable[\s=]+)(.+)$', line)
@@ -273,10 +296,11 @@ class RequirementsParser:
         return packages
 
     @staticmethod
-    def parse_requirements(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None) -> dict[str, str]:
+    def parse_requirements(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None, target_env: dict = None) -> dict[str, str]:
         """
         Rekurzívne načíta requirements.txt a vráti požiadavky aj s verziami:
         { 'normalizovaný_názov': 'celý_riadok_požiadavky' }
+        Ak je zadaný target_env, filtruje riadky okamžite pred pridaním do slovníka (rieši kolízie duplicít).
         """
         if depth > 50:
             return {}
@@ -345,10 +369,15 @@ class RequirementsParser:
                             current_dir = os.path.dirname(abs_path)
                             nested_abs_path = os.path.realpath(os.path.join(current_dir, nested_rel_path))
                             try:
-                                nested = RequirementsParser.parse_requirements(nested_abs_path, visited_files, depth + 1, base_dir, pip_e_root)
+                                nested = RequirementsParser.parse_requirements(nested_abs_path, visited_files, depth + 1, base_dir, pip_e_root, target_env=target_env)
                                 requirements.update(nested)
                             except Exception:
                                 pass
+                        continue
+
+                    # KĽÚČOVÝ FILTER: Overenie markeru ešte PRED spracovaním riadku a vložením do slovníka!
+                    # Týmto sa predíde prepísaniu kľúča pri dvoch verziách toho istého balíčka.
+                    if not RequirementsParser.is_marker_valid(line, target_env=target_env):
                         continue
 
                     editable_match = re.match(r'^(?:-e\s+|--editable[\s=]+)(.+)$', line)
@@ -398,11 +427,15 @@ class RequirementsParser:
         return requirements
 
     @staticmethod
-    def is_satisfied(requirement: str, installed_version: str) -> bool:
+    def is_satisfied(requirement: str, installed_version: str, target_env: dict = None) -> bool:
         """
-        Vyhodnotí, či verzia nainštalovaná na disku spĺňa požiadavku z requirements.txt.
-        Čistá logika bez závislosti na externých knižniciach.
+        Vyhodnotí, či verzia nainštalovaná na disku spĺňa požiadavku z requirements.txt,
+        s rešpektovaním PEP-508 podmienok pre dané prostredie.
         """
+        # Ak podmienka neplatí pre tento systém, nepotrebujeme ho (tým pádom je "splnené")
+        if not RequirementsParser.is_marker_valid(requirement, target_env):
+            return True
+
         if not installed_version:
             return False
 
@@ -453,7 +486,7 @@ class RequirementsParser:
         return True
 
     @staticmethod
-    def parse_specs(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None) -> dict[str, str]:
+    def parse_specs(file_path: str, visited_files: set = None, depth: int = 0, base_dir: str = None, pip_e_root: str = None, target_env: dict = None) -> dict[str, str]:
         """
         Rekurzívne vyparsuje requirements.txt súbor a vráti mapu:
         { normalizovaný_názov: plná_špecifikácia_balíčka }.
@@ -536,10 +569,14 @@ class RequirementsParser:
                             nested_abs_path = os.path.realpath(os.path.join(current_dir, nested_rel_path))
 
                             try:
-                                nested_specs = RequirementsParser.parse_specs(nested_abs_path, visited_files, depth + 1, base_dir, pip_e_root)
+                                nested_specs = RequirementsParser.parse_specs(nested_abs_path, visited_files, depth + 1, base_dir, pip_e_root, target_env=target_env)
                                 specs.update(nested_specs)
                             except Exception as e:
                                 print(f"[RequirementsParser] Varovanie: Zlyhalo spracovanie '{nested_abs_path}': {e}")
+                        continue
+
+                    # Overenie markeru: Ak neplatí pre cieľové prostredie, riadok zahodíme
+                    if not RequirementsParser.is_marker_valid(line, target_env=target_env):
                         continue
 
                     editable_match = re.match(r'^(?:-e\s+|--editable[\s=]+)(.+)$', line)
@@ -691,7 +728,6 @@ class RequirementsParser:
         if os.path.isfile(setup_py):
             try:
                 with open(setup_py, "r", encoding="utf-8", errors="replace") as f:
-                    content = f.read()
                     deps = RequirementsParser._extract_bracket_list(content, "install_requires")
                     if deps:
                         return deps
@@ -701,12 +737,12 @@ class RequirementsParser:
         return []
 
     @staticmethod
-    def parse_extras_map(file_path: str, pip_e_root: str = None) -> dict[str, list[str]]:
-        """Vráti mapu {rodič: [extra1, extra2]} využitím existujúceho parsera."""
+    def parse_extras_map(file_path: str, pip_e_root: str = None, target_env: dict = None) -> dict[str, list[str]]:
+        """Vráti mapu {rodič: [extra1, extra2]} využitím existujúceho parsera s voliteľným target_env."""
         extras_map = {}
         if not file_path or not os.path.isfile(file_path):
             return extras_map
-        reqs = RequirementsParser.parse_requirements(file_path, pip_e_root=pip_e_root)
+        reqs = RequirementsParser.parse_requirements(file_path, pip_e_root=pip_e_root, target_env=target_env)
         for norm_name, full_spec in reqs.items():
             exts = RequirementsParser.extract_extras(full_spec)
             if exts:

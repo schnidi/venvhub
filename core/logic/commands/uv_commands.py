@@ -102,6 +102,9 @@ class UvCommandDispatcher:
 
             "uninstall_multiple": lambda **kwargs: 
                 self.uv_base + ["uninstall"] + kwargs['packages'] + self.python_arg,
+
+            "compile_hashes": lambda **kwargs: 
+                self.uv_base + ["compile", kwargs['src_file'], "--generate-hashes", "-o", kwargs['dst_file']] + self.python_arg,
         }
 
     def get(self, command_key: str, **kwargs: Any) -> list[str]:

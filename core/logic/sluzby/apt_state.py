@@ -15,7 +15,7 @@ class AptState(str, Enum):
     DIFF_CALCULATING = "DIFF_CALCULATING"
     INSTALLING = "INSTALLING"
     EXTRAS_SYNCING = "EXTRAS_SYNCING"
-    EDITABLE_SYNCING = "EDITABLE_SYNCING"  # <-- PRIDANÝ STAV PRE pip -e
+    EDITABLE_SYNCING = "EDITABLE_SYNCING"
     STATE_UPDATING = "STATE_UPDATING"
     GRAPH_BUILDING = "GRAPH_BUILDING"
     ORPHANS_CALCULATING = "ORPHANS_CALCULATING"
@@ -24,6 +24,7 @@ class AptState(str, Enum):
     COMPLETED_SUCCESS = "COMPLETED_SUCCESS"
     COMPLETED_SKIPPED = "COMPLETED_SKIPPED"
     COMPLETED_WARNING = "COMPLETED_WARNING"
+    CORRUPT_STATE = "CORRUPT_STATE"
     FAILED = "FAILED"
 
     @property
@@ -35,7 +36,7 @@ class AptState(str, Enum):
             AptState.DIFF_CALCULATING: ("apt_state_diff_calculating", "📦 [APT: STATE 1 - DIFF] Comparing requirements.txt with JSON state..."),
             AptState.INSTALLING: ("apt_state_installing", "🚀 [APT: STATE 2 - INSTALL] Installing requirements ({count}): {pkgs}"),
             AptState.EXTRAS_SYNCING: ("apt_state_extras_syncing", "🔗 [APT: STATE 3 - EXTRAS] Bound extras for '{parent}': {children}"),
-            AptState.EDITABLE_SYNCING: ("apt_state_editable_syncing", "📂 [APT: STATE - EDITABLE] Bound dependencies for '{pkg}': {children}"),  # <-- PRIDANÁ ŠABLÓNA
+            AptState.EDITABLE_SYNCING: ("apt_state_editable_syncing", "📂 [APT: STATE - EDITABLE] Bound dependencies for '{pkg}': {children}"),
             AptState.STATE_UPDATING: ("apt_state_updating", "💾 Updating venvhub_apt_state.json..."),
             AptState.GRAPH_BUILDING: ("apt_state_graph_building", "📊 Building environment dependency graph..."),
             AptState.ORPHANS_CALCULATING: ("apt_state_orphans_calculating", "🔍 Analyzing dependency tree and finding orphan packages..."),
@@ -44,6 +45,7 @@ class AptState(str, Enum):
             AptState.COMPLETED_SUCCESS: ("apt_state_completed_success", "✅ [APT: DONE] Status cycle completed successfully."),
             AptState.COMPLETED_SKIPPED: ("apt_state_completed_skipped", "ℹ️ Package '{pkg}' already satisfies requirement. Skipping."),
             AptState.COMPLETED_WARNING: ("apt_state_completed_warning", "⚠️ [{mgr} Check] Dependency conflicts detected:\n{output}"),
+            AptState.CORRUPT_STATE: ("apt_state_corrupt", "🛑 [APT: CORRUPT] Invalid state for venv '{venv}'. Recreate the environment."),
             AptState.FAILED: ("apt_state_failed", "❌ [APT: ERROR] {err}"),
         }
         return templates.get(self, ("apt_state_unknown", "Unknown state: {err}"))
@@ -69,7 +71,7 @@ class AptStatusEvent:
 
     @property
     def is_error(self) -> bool:
-        return self.state == AptState.FAILED
+        return self.state in (AptState.FAILED, AptState.CORRUPT_STATE)
 
     @property
     def is_finished(self) -> bool:
@@ -77,5 +79,6 @@ class AptStatusEvent:
             AptState.COMPLETED_SUCCESS, 
             AptState.COMPLETED_SKIPPED, 
             AptState.COMPLETED_WARNING, 
+            AptState.CORRUPT_STATE,
             AptState.FAILED
         )

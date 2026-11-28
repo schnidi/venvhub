@@ -7,27 +7,7 @@ import os
 import sys
 import threading
 
-# =========================================================================
-# NATVRDO PREPNÚŤ CELÝ WINDOWS A KONZOLU DO NATIVE UTF-8 (Code Page 65001)
-# =========================================================================
-if sys.platform == "win32":
-    import ctypes
-    ctypes.windll.kernel32.SetConsoleOutputCP(65001)
-    ctypes.windll.kernel32.SetConsoleCP(65001)
-
-    handle = ctypes.windll.kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
-    mode = ctypes.c_ulong()
-    if ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
-        ctypes.windll.kernel32.SetConsoleMode(handle, mode.value | 0x0004)
-
-if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-if sys.stderr and hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")
-
 os.environ["PYTHONUTF8"] = "1"
-os.environ["PYTHONIOENCODING"] = "utf-8"
-# =========================================================================
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
