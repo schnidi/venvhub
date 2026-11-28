@@ -4,7 +4,7 @@
 ### 📝 Overview
 VenvHub Pro is a comprehensive, IDE-agnostic management tool for Python developers. It solves real-world problems like dependency hell, project portability, microservice orchestration, and .exe packaging—replacing multiple tools with one smooth, asynchronous, responsive application.
 
-**Version:** v2.6.00  
+**Version:** v2.6.07  
 **Developer:** Ing. Viliam Schneider  
 **Partner / Deployed at:** Seal and Lube, spol. s r.o.
 
@@ -82,6 +82,20 @@ A beautiful, modern user interface without classic Windows borders (custom title
 #### 🛡️ Secure Execution & Background Services
 * **Smart WinAdmin (UAC):** The system only requests Administrator privileges exactly when needed (e.g., writing to protected system folders like `C:\Program Files`) and streams live progress back to the UI.
 * **GitHub Auto-Updater:** A silent background thread checks the GitHub API for new releases and notifies you with a title bar icon if an update is available.
+
+#### 🌳 Interactive Dependency Tree & TOML Exporter (Venv Tree)
+A dedicated interactive visualization tool for your virtual environments that completely replaces confusing flat package lists:
+
+- **Source & Ownership Hierarchy:** Instead of one big list, packages are grouped into distinct roots:
+  - 📁 **Local Linker Modules:** Modules connected via the VenvHub Linker.
+  - 📁 **Editable Projects (`pip -e`):** Local repository-linked packages on your drive.
+  - 📁 **Project Requirements:** Root packages declared in your `requirements.txt`.
+  - 📁 **Manual / Explicit:** Ad-hoc packages installed directly by you.
+  - 📁 **System Packages:** Isolated base environment tools protected from deletion.
+  - 📁 **True Orphans:** Unused packages detected and ready for cleanup.
+- **Deep Inspector Side Panel:** Click any package to instantly see who keeps it alive (exact owners and reverse dependencies), direct requirements, bound `[extras]` (e.g., `requests[socks] -> pysocks`), license, and disk paths.
+- **PEP 621 `pyproject.toml` Exporter:** Export dependencies to a clean, modern `pyproject.toml` using checkboxes. Automatically preserves Git repository URLs (PEP 610) instead of raw version numbers.
+- **Real-Time Search & Filters:** Live search that auto-expands branches, category counter buttons, and on-the-fly language switching.
 
 ---
 
